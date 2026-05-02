@@ -1,6 +1,6 @@
-/              /fasanya-home.html    200
-/home          /fasanya-home.html    200
-/ChainReady    /index.html           200
-/ChainReady/   /index.html           200
-/chainready    /index.html           200
-/chainready/   /index.html           200
+/              /index.html           200
+/home          /index.html           200
+/ChainReady    /chainready.html      200
+/ChainReady/   /chainready.html      200
+/chainready    /chainready.html      200
+/chainready/   /chainready.html      200
