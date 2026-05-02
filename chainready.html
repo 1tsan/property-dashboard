@@ -3,865 +3,790 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Property Transaction Dashboard | fasanya.co.uk</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <title>ChainReady — Property Transaction Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg:#0f0f13; --surface:#181820; --surface2:#1e1e28; --border:#2a2a38;
-      --text:#f0ede8; --muted:#8a87a0; --accent:#c9a96e; --accent2:#7eb8b0;
-      --accent3:#e07b6a; --green:#6ec99a; --red:#e07b6a; --radius:12px;
-    }
-    html, body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { font-family: 'Outfit', sans-serif; background: #0f0f13; }
     #root { min-height: 100vh; }
+    input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #c9a96e; cursor: pointer; border: 2px solid #0f0f13; }
+    input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #c9a96e; cursor: pointer; border: 2px solid #0f0f13; }
+    input[type=number] { -moz-appearance: textfield; }
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
-  <script type="text/babel">
+  <!-- React 18 -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- Babel for JSX — loaded synchronously before our script -->
+  <script src="https://unpkg.com/@babel/standalone@7.23.3/babel.min.js"></script>
+
+  <script type="text/babel" data-presets="react">
     const { useState, useMemo, useRef } = React;
 
-    // ─── SDLT Calculator ──────────────────────────────────────────────────────
-    function calcSDLT(price, buyerType) {
-      if (price <= 0) return { total: 0, bands: [] };
-      let bands = [];
-      let type = buyerType;
-      if (type === "firstTime") {
-        if (price > 500000) { type = "standard"; }
-        else {
-          const b1 = Math.min(price, 300000);
-          const b2 = Math.max(0, Math.min(price, 500000) - 300000);
-          bands = [
-            { label: "£0 – £300,000", rate: 0, taxable: b1, tax: 0 },
-            { label: "£300,001 – £500,000", rate: 5, taxable: b2, tax: b2 * 0.05 },
-          ];
-          return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
-        }
-      }
-      if (type === "standard") {
-        const thresholds = [
-          { limit: 125000, rate: 0 }, { limit: 250000, rate: 2 },
-          { limit: 925000, rate: 5 }, { limit: 1500000, rate: 10 }, { limit: Infinity, rate: 12 }
-        ];
-        const labels = ["£0 – £125,000","£125,001 – £250,000","£250,001 – £925,000","£925,001 – £1,500,000","Above £1,500,000"];
-        let prev = 0;
-        for (let i = 0; i < thresholds.length; i++) {
-          const { limit, rate } = thresholds[i];
-          if (price <= prev) break;
-          const taxable = Math.min(price, limit) - prev;
-          if (taxable > 0) bands.push({ label: labels[i], rate, taxable, tax: taxable * (rate / 100) });
-          prev = limit;
-        }
-        return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
-      }
-      if (type === "additional") {
-        const thresholds = [
-          { limit: 125000, base: 0, surcharge: 5 }, { limit: 250000, base: 2, surcharge: 5 },
-          { limit: 925000, base: 5, surcharge: 5 }, { limit: 1500000, base: 10, surcharge: 5 },
-          { limit: Infinity, base: 12, surcharge: 5 }
-        ];
-        const labels = ["£0 – £125,000 (5%)","£125,001 – £250,000 (7%)","£250,001 – £925,000 (10%)","£925,001 – £1,500,000 (15%)","Above £1,500,000 (17%)"];
-        let prev = 0;
-        for (let i = 0; i < thresholds.length; i++) {
-          const { limit, base, surcharge } = thresholds[i];
-          if (price <= prev) break;
-          const taxable = Math.min(price, limit) - prev;
-          const rate = base + surcharge;
-          if (taxable > 0) bands.push({ label: labels[i], rate, taxable, tax: taxable * (rate / 100) });
-          prev = limit;
-        }
-        return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
-      }
-      return { total: 0, bands: [] };
-    }
 
-    function fmt(n) {
-      if (n === undefined || n === null || isNaN(n)) return "£0";
-      const abs = Math.abs(Math.round(n));
-      const str = "£" + abs.toLocaleString("en-GB");
-      return n < 0 ? "-" + str : str;
+// ─── SDLT ─────────────────────────────────────────────────────────────────────
+function calcSDLT(price, buyerType) {
+  if (price <= 0) return { total: 0, bands: [] };
+  let bands = [], type = buyerType;
+  if (type === "firstTime") {
+    if (price > 500000) { type = "standard"; }
+    else {
+      const b1 = Math.min(price, 300000), b2 = Math.max(0, Math.min(price, 500000) - 300000);
+      return { total: b2 * 0.05, bands: [{ label: "£0 – £300,000", rate: 0, tax: 0 }, { label: "£300,001 – £500,000", rate: 5, tax: b2 * 0.05 }] };
     }
-    function fmtPct(n) { return n.toFixed(2) + "%"; }
+  }
+  if (type === "standard") {
+    const T = [{ limit: 125000, rate: 0 },{ limit: 250000, rate: 2 },{ limit: 925000, rate: 5 },{ limit: 1500000, rate: 10 },{ limit: Infinity, rate: 12 }];
+    const L = ["£0 – £125,000","£125,001 – £250,000","£250,001 – £925,000","£925,001 – £1,500,000","Above £1,500,000"];
+    let prev = 0;
+    T.forEach(({ limit, rate }, i) => { if (price > prev) { const t = Math.min(price, limit) - prev; if (t > 0) bands.push({ label: L[i], rate, tax: t * rate / 100 }); prev = limit; } });
+    return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
+  }
+  if (type === "additional") {
+    const T = [{ limit: 125000, r: 5 },{ limit: 250000, r: 7 },{ limit: 925000, r: 10 },{ limit: 1500000, r: 15 },{ limit: Infinity, r: 17 }];
+    const L = ["£0 – £125,000 (5%)","£125,001 – £250,000 (7%)","£250,001 – £925,000 (10%)","£925,001 – £1,500,000 (15%)","Above £1,500,000 (17%)"];
+    let prev = 0;
+    T.forEach(({ limit, r }, i) => { if (price > prev) { const t = Math.min(price, limit) - prev; if (t > 0) bands.push({ label: L[i], rate: r, tax: t * r / 100 }); prev = limit; } });
+    return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
+  }
+  return { total: 0, bands: [] };
+}
 
-    function calcMortgage(principal, annualRate, years) {
-      if (!principal || !annualRate || !years) return { monthly: 0, total: 0, interest: 0 };
-      const r = annualRate / 100 / 12;
-      const n = years * 12;
-      if (r === 0) return { monthly: principal / n, total: principal, interest: 0 };
-      const monthly = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-      const total = monthly * n;
-      return { monthly, total, interest: total - principal };
-    }
+function fmt(n) {
+  if (n === undefined || n === null || isNaN(n)) return "£0";
+  const abs = Math.abs(Math.round(n));
+  return (n < 0 ? "-£" : "£") + abs.toLocaleString("en-GB");
+}
+function fmtPct(n) { return n.toFixed(2) + "%"; }
+function calcMortgage(principal, annualRate, years) {
+  if (!principal || !annualRate || !years) return { monthly: 0, total: 0, interest: 0 };
+  const r = annualRate / 100 / 12, n = years * 12;
+  if (r === 0) return { monthly: principal / n, total: principal, interest: 0 };
+  const monthly = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  const total = monthly * n;
+  return { monthly, total, interest: total - principal };
+}
 
-    // ─── Components ───────────────────────────────────────────────────────────
-    function SliderInput({ label, value, onChange, min, max, step = 1000, prefix = "£", suffix = "", hint }) {
-      const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
-      return (
-        <div className="slider-wrap">
-          {label && (
-            <div className="slider-header">
-              <span className="slider-label">{label}</span>
-              <span className="slider-value">{prefix}{typeof value === "number" ? value.toLocaleString("en-GB") : value}{suffix}</span>
-            </div>
-          )}
-          {hint && <div className="slider-hint">{hint}</div>}
-          <div className="slider-track-wrap">
-            <div className="slider-fill" style={{ width: `${pct}%` }} />
-            <input type="range" min={min} max={max} step={step} value={value}
-              onChange={e => onChange(Number(e.target.value))} className="slider" />
+// ─── ONBOARDING ───────────────────────────────────────────────────────────────
+function Onboarding({ onComplete, theme }) {
+  const d = theme === "light";
+  const [vals, setVals] = useState({
+    offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", mortgageTerm: "",
+  });
+  const [errors, setErrors] = useState({});
+
+  const set = (k, v) => setVals(p => ({ ...p, [k]: v }));
+
+  const fields = [
+    { key: "offerPrice",       label: "Offer price on new home",            prefix: "£", placeholder: "e.g. 750000", hint: "The price you plan to offer or have offered." },
+    { key: "depositPct",       label: "Deposit %",                          prefix: "",  suffix: "%", placeholder: "e.g. 20", hint: "Percentage of the purchase price as deposit." },
+    { key: "salePrice",        label: "Expected sale price of current property", prefix: "£", placeholder: "e.g. 420000", hint: "What you expect to sell your property for." },
+    { key: "existingMortgage", label: "Mortgage outstanding on property",        prefix: "£", placeholder: "e.g. 150000", hint: "Balance remaining on your current mortgage." },
+    { key: "mortgageRate",     label: "Expected mortgage interest rate",     prefix: "",  suffix: "%", placeholder: "e.g. 4.5", hint: "The rate on your new mortgage (current avg ~4.3–4.8%)." },
+    { key: "mortgageTerm",     label: "Mortgage term",                       prefix: "",  suffix: " years", placeholder: "e.g. 25", hint: "Number of years for the new mortgage." },
+  ];
+
+  const required = ["offerPrice", "depositPct", "salePrice", "mortgageTerm"];
+
+  const handleSubmit = () => {
+    const errs = {};
+    required.forEach(k => { if (!vals[k] || isNaN(Number(vals[k].toString().replace(/,/g, "")))) errs[k] = "Required"; });
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    const n = k => Number(vals[k].toString().replace(/,/g, "")) || 0;
+    onComplete({ offerPrice: n("offerPrice"), depositPct: n("depositPct"), salePrice: n("salePrice"), existingMortgage: n("existingMortgage"), mortgageTerm: n("mortgageTerm") });
+  };
+
+  const steps = [
+    { n: "1", title: "Enter your basics", body: "Fill in the six fields — all are quick estimates, nothing needs to be exact." },
+    { n: "2", title: "See your position instantly", body: "The Overview shows your cash surplus or deficit after all costs." },
+    { n: "3", title: "Refine on any tab", body: "Adjust fees, stamp duty type, agent rates, solicitor costs — every number is editable." },
+    { n: "4", title: "Run scenarios", body: "Use the Scenarios tab to test different offer prices, sale prices, and rates side by side." },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: d ? "#f5f4f0" : "#0f0f13", display: "flex", flexDirection: "column" }}>
+      {/* Top bar */}
+      <div style={{ padding: "16px 24px", borderBottom: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: d ? "#fff" : "#181820" }}>
+        <a href="https://fasanya.co.uk" style={{ fontFamily: "'Georgia', serif", fontSize: 15, letterSpacing: 4, textTransform: "uppercase", color: d ? "#1a1a1a" : "#f0ede8", textDecoration: "none", opacity: 0.7 }}>← Fasanya</a>
+        <span style={{ fontFamily: "'Georgia', serif", fontSize: 13, letterSpacing: 2, color: d ? "#c9a96e" : "#c9a96e", textTransform: "uppercase" }}>ChainReady</span>
+        <div style={{ width: 80 }} />
+      </div>
+
+      <div style={{ flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px 60px", gap: 32, flexWrap: "wrap" }}>
+
+        {/* How-to guide */}
+        <div style={{ width: 300, flexShrink: 0 }}>
+          <div style={{ fontFamily: "'Georgia', serif", fontSize: 22, fontWeight: 400, color: d ? "#1a1a1a" : "#f0ede8", lineHeight: 1.3, marginBottom: 6 }}>
+            Plan your move<br /><span style={{ color: "#c9a96e", fontStyle: "italic" }}>with clarity.</span>
           </div>
-          <div className="slider-bounds">
-            <span>{prefix}{min.toLocaleString("en-GB")}{suffix}</span>
-            <span>{prefix}{max.toLocaleString("en-GB")}{suffix}</span>
+          <p style={{ fontSize: 13, color: d ? "#666" : "#8a87a0", lineHeight: 1.7, marginBottom: 28 }}>
+            ChainReady calculates your full financial position across both the purchase and sale — so you know exactly where you stand before you negotiate.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {steps.map(s => (
+              <div key={s.n} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(201,169,110,0.15)", border: "1px solid rgba(201,169,110,0.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#c9a96e" }}>{s.n}</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 2 }}>{s.title}</div>
+                  <div style={{ fontSize: 12, color: d ? "#666" : "#8a87a0", lineHeight: 1.6 }}>{s.body}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 28, padding: "12px 16px", borderRadius: 8, background: d ? "rgba(201,169,110,0.08)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: d ? "#7a6030" : "#a07840", lineHeight: 1.6 }}>
+            <strong style={{ color: "#c9a96e" }}>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared. We've pre-filled the mortgage rate with today's best 5-year fixed rate (4.73% from Nationwide, May 2026).
           </div>
         </div>
-      );
-    }
 
-    function PillToggle({ options, value, onChange }) {
-      return (
-        <div className="pill-toggle">
-          {options.map(o => (
-            <button key={o.value} className={`pill ${value === o.value ? "active" : ""}`}
-              onClick={() => onChange(o.value)}>{o.label}</button>
+        {/* Form */}
+        <div style={{ width: 420, background: d ? "#fff" : "#181820", border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, borderRadius: 16, padding: "32px 28px", boxShadow: d ? "0 4px 24px rgba(0,0,0,0.07)" : "0 4px 32px rgba(0,0,0,0.4)" }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 4 }}>Your numbers</div>
+          <div style={{ fontSize: 12, color: d ? "#888" : "#8a87a0", marginBottom: 24 }}>
+            Fill in what you know — estimates are fine. Existing mortgage is optional.
+          </div>
+
+          {fields.map(f => (
+            <div key={f.key} style={{ marginBottom: 16 }}>
+              <label style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 500, color: errors[f.key] ? "#e07b6a" : d ? "#555" : "#8a87a0", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                <span>{f.label}{!required.includes(f.key) && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 4, color: d ? "#999" : "#666" }}>(optional)</span>}</span>
+                {errors[f.key] && <span style={{ color: "#e07b6a", fontSize: 10 }}>Required</span>}
+              </label>
+              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                {f.prefix && <span style={{ position: "absolute", left: 12, fontSize: 14, color: d ? "#888" : "#6a6880", pointerEvents: "none" }}>{f.prefix}</span>}
+                <input
+                  type="number"
+                  placeholder={f.placeholder}
+                  value={vals[f.key]}
+                  onChange={e => { set(f.key, e.target.value); if (errors[f.key]) setErrors(p => ({ ...p, [f.key]: null })); }}
+                  style={{
+                    width: "100%", padding: f.prefix ? "10px 12px 10px 26px" : "10px 12px",
+                    paddingRight: f.suffix ? 52 : 12,
+                    background: d ? (errors[f.key] ? "rgba(224,123,106,0.06)" : "#f8f7f5") : (errors[f.key] ? "rgba(224,123,106,0.08)" : "#1e1e28"),
+                    border: `1px solid ${errors[f.key] ? "#e07b6a" : d ? "#ddd" : "#2a2a38"}`,
+                    borderRadius: 8, fontSize: 14, color: d ? "#1a1a1a" : "#f0ede8",
+                    fontFamily: "inherit", outline: "none",
+                  }}
+                />
+                {f.suffix && <span style={{ position: "absolute", right: 12, fontSize: 12, color: d ? "#888" : "#6a6880", pointerEvents: "none" }}>{f.suffix}</span>}
+              </div>
+              {f.hint && <div style={{ fontSize: 11, color: d ? "#aaa" : "#555", marginTop: 4 }}>{f.hint}</div>}
+            </div>
+          ))}
+
+          <button
+            onClick={handleSubmit}
+            style={{
+              width: "100%", padding: "13px", marginTop: 8,
+              background: "#c9a96e", color: "#0f0f13",
+              border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600,
+              cursor: "pointer", fontFamily: "inherit", letterSpacing: 0.3,
+              transition: "opacity 0.2s",
+            }}
+            onMouseOver={e => e.target.style.opacity = 0.88}
+            onMouseOut={e => e.target.style.opacity = 1}
+          >
+            Show my position →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SMALL COMPONENTS ─────────────────────────────────────────────────────────
+function SliderInput({ label, value, onChange, min, max, step = 1000, prefix = "£", suffix = "", hint, theme }) {
+  const d = theme === "light";
+  const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {label && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+        <span style={{ fontSize: 12, color: d ? "#666" : "#8a87a0" }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8" }}>{prefix}{typeof value === "number" ? value.toLocaleString("en-GB") : value}{suffix}</span>
+      </div>}
+      {hint && <div style={{ fontSize: 11, color: d ? "#aaa" : "#6a6880", marginBottom: 4 }}>{hint}</div>}
+      <div style={{ position: "relative", height: 5, background: d ? "#e0ddd8" : "#2a2a38", borderRadius: 3, margin: "6px 0 3px" }}>
+        <div style={{ position: "absolute", height: "100%", width: `${pct}%`, background: "#c9a96e", borderRadius: 3, pointerEvents: "none" }} />
+        <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))}
+          style={{ position: "absolute", top: "50%", left: 0, width: "100%", height: 5, background: "transparent", transform: "translateY(-50%)", cursor: "pointer", WebkitAppearance: "none", appearance: "none" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: d ? "#aaa" : "#6a6880" }}>
+        <span>{prefix}{min.toLocaleString("en-GB")}{suffix}</span>
+        <span>{prefix}{max.toLocaleString("en-GB")}{suffix}</span>
+      </div>
+    </div>
+  );
+}
+
+function PillToggle({ options, value, onChange, theme }) {
+  const d = theme === "light";
+  return (
+    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14 }}>
+      {options.map(o => (
+        <button key={o.value} onClick={() => onChange(o.value)} style={{
+          padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+          border: value === o.value ? "1px solid #c9a96e" : `1px solid ${d ? "#ddd" : "#2a2a38"}`,
+          background: value === o.value ? "#c9a96e" : d ? "#f0ede8" : "#1e1e28",
+          color: value === o.value ? "#0f0f13" : d ? "#666" : "#8a87a0",
+        }}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+function Card({ title, subtitle, children, accent, theme }) {
+  const d = theme === "light";
+  return (
+    <div style={{ background: d ? "#fff" : "#181820", border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, borderRadius: 12, overflow: "hidden", borderTop: accent ? `3px solid ${accent}` : undefined }}>
+      <div style={{ padding: "13px 15px 9px", borderBottom: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}` }}>
+        <div style={{ fontFamily: "'Georgia', serif", fontSize: 13, fontWeight: 400, color: d ? "#1a1a1a" : "#f0ede8" }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 11, color: d ? "#888" : "#8a87a0", marginTop: 2 }}>{subtitle}</div>}
+      </div>
+      <div style={{ padding: "13px 15px" }}>{children}</div>
+    </div>
+  );
+}
+
+function CostRow({ label, value, sub, highlight, theme }) {
+  const d = theme === "light";
+  return (
+    <div style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      padding: highlight ? "10px 15px" : "8px 0",
+      borderBottom: highlight ? "none" : `1px solid ${d ? "#f0ede8" : "#2a2a38"}`,
+      background: highlight ? (d ? "rgba(201,169,110,0.08)" : "rgba(201,169,110,0.06)") : "transparent",
+      margin: highlight ? "0 -15px" : 0,
+      borderTop: highlight ? `1px solid ${d ? "#e0ddd8" : "#2a2a38"}` : "none",
+    }}>
+      <span style={{ fontSize: 12, color: highlight ? (d ? "#1a1a1a" : "#f0ede8") : (d ? "#666" : "#8a87a0"), fontWeight: highlight ? 600 : 400 }}>{label}</span>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+        {sub && <span style={{ fontSize: 10, color: d ? "#aaa" : "#6a6880" }}>{sub}</span>}
+        <span style={{ fontSize: highlight ? 14 : 13, fontWeight: 600, color: highlight ? "#c9a96e" : (d ? "#1a1a1a" : "#f0ede8") }}>{fmt(value)}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
+function App() {
+  const [ready, setReady] = useState(false);
+  const [theme, setTheme] = useState("dark");
+  const d = theme === "light";
+
+  // Inputs with defaults (set from onboarding)
+  const [offerPrice, setOfferPrice] = useState(750000);
+  const [depositPct, setDepositPct] = useState(20);
+  const [buyerType, setBuyerType] = useState("standard");
+  const [mortgageRate, setMortgageRate] = useState(4.5);
+  const [mortgageTerm, setMortgageTerm] = useState(25);
+  const [salePrice, setSalePrice] = useState(420000);
+  const [agentFeePct, setAgentFeePct] = useState(1.5);
+  const [agentFeeVAT, setAgentFeeVAT] = useState(true);
+  const [buyerSolicitorFee, setBuyerSolicitorFee] = useState(2000);
+  const [sellerSolicitorFee, setSellerSolicitorFee] = useState(1500);
+  const [surveyFee, setSurveyFee] = useState(800);
+  const [removals, setRemovals] = useState(1500);
+  const [mortgageArrangement, setMortgageArrangement] = useState(999);
+  const [otherCosts, setOtherCosts] = useState(500);
+  const [existingMortgage, setExistingMortgage] = useState(150000);
+  const [savings, setSavings] = useState(50000);
+  const [tab, setTab] = useState("overview");
+  const printRef = useRef(null);
+
+  // Scenario
+  const [scenOfferPrice, setScenOfferPrice] = useState(750000);
+  const [scenSalePrice, setScenSalePrice] = useState(420000);
+  const [scenDepositPct, setScenDepositPct] = useState(20);
+  const [scenMortgageRate, setScenMortgageRate] = useState(4.5);
+
+  // Live market rate: best 5yr fixed May 2026 (Nationwide, source: L&C/HomeOwners Alliance)
+  const MARKET_RATE = 4.73;
+
+  const handleOnboardingComplete = (vals) => {
+    setOfferPrice(vals.offerPrice);
+    setDepositPct(vals.depositPct);
+    setSalePrice(vals.salePrice);
+    setExistingMortgage(vals.existingMortgage);
+    setMortgageRate(MARKET_RATE);
+    setMortgageTerm(vals.mortgageTerm);
+    setScenOfferPrice(vals.offerPrice);
+    setScenSalePrice(vals.salePrice);
+    setScenDepositPct(vals.depositPct);
+    setScenMortgageRate(MARKET_RATE);
+    setReady(true);
+  };
+
+  // Calcs
+  const depositAmount = useMemo(() => (offerPrice * depositPct) / 100, [offerPrice, depositPct]);
+  const mortgageLoan = useMemo(() => offerPrice - depositAmount, [offerPrice, depositAmount]);
+  const ltv = useMemo(() => (mortgageLoan / offerPrice) * 100, [mortgageLoan, offerPrice]);
+  const sdlt = useMemo(() => calcSDLT(offerPrice, buyerType), [offerPrice, buyerType]);
+  const mortgage = useMemo(() => calcMortgage(mortgageLoan, mortgageRate, mortgageTerm), [mortgageLoan, mortgageRate, mortgageTerm]);
+  const agentFeeBase = useMemo(() => (salePrice * agentFeePct) / 100, [salePrice, agentFeePct]);
+  const agentFeeTotal = useMemo(() => agentFeeBase * (agentFeeVAT ? 1.2 : 1), [agentFeeBase, agentFeeVAT]);
+  const grossSaleProceeds = useMemo(() => salePrice - agentFeeTotal - sellerSolicitorFee, [salePrice, agentFeeTotal, sellerSolicitorFee]);
+  const netSaleProceeds = useMemo(() => grossSaleProceeds - existingMortgage, [grossSaleProceeds, existingMortgage]);
+  const saleEquity = useMemo(() => salePrice - existingMortgage, [salePrice, existingMortgage]);
+  const saleEquityPct = useMemo(() => salePrice > 0 ? (saleEquity / salePrice) * 100 : 0, [saleEquity, salePrice]);
+  const totalBuyingCosts = useMemo(() => sdlt.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts, [sdlt.total, buyerSolicitorFee, surveyFee, removals, mortgageArrangement, otherCosts]);
+  const totalCashNeeded = useMemo(() => depositAmount + totalBuyingCosts, [depositAmount, totalBuyingCosts]);
+  const cashAvailable = useMemo(() => savings + netSaleProceeds, [savings, netSaleProceeds]);
+  const cashSurplusDeficit = useMemo(() => cashAvailable - totalCashNeeded, [cashAvailable, totalCashNeeded]);
+
+  // Scenario calcs
+  const scenDepositAmt = (scenOfferPrice * scenDepositPct) / 100;
+  const scenLoan = scenOfferPrice - scenDepositAmt;
+  const scenSDLT = calcSDLT(scenOfferPrice, buyerType);
+  const scenAgentFee = (scenSalePrice * agentFeePct) / 100 * (agentFeeVAT ? 1.2 : 1);
+  const scenNetSale = scenSalePrice - scenAgentFee - sellerSolicitorFee - existingMortgage;
+  const scenBuyingCosts = scenSDLT.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
+  const scenCashNeeded = scenDepositAmt + scenBuyingCosts;
+  const scenCashAvailable = savings + scenNetSale;
+  const scenSurplus = scenCashAvailable - scenCashNeeded;
+  const scenMortgage = calcMortgage(scenLoan, scenMortgageRate, mortgageTerm);
+  const scenDiff = scenSurplus - cashSurplusDeficit;
+
+  const resetScenario = () => { setScenOfferPrice(offerPrice); setScenSalePrice(salePrice); setScenDepositPct(depositPct); setScenMortgageRate(mortgageRate); };
+
+  // PDF Export
+  const handleExportPDF = () => {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const s = cashSurplusDeficit;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>ChainReady Summary</title>
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;font-size:12px;color:#1a1a2e;background:#fff;padding:32px 36px}
+    h1{font-size:20px;font-weight:400;margin-bottom:4px}.sub{font-size:11px;color:#888;margin-bottom:20px}
+    .badge{font-size:9px;border:1px solid #c9a96e;color:#c9a96e;padding:2px 8px;border-radius:20px;display:inline-block;text-transform:uppercase;letter-spacing:.5px}
+    .verdict{padding:12px 16px;border-radius:8px;margin:16px 0;font-size:13px;font-weight:600}
+    .ok{background:#f0fdf4;border:1px solid #86efac;color:#16a34a}.warn{background:#fff7f6;border:1px solid #fca5a5;color:#dc2626}
+    .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+    .tile{background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;padding:10px 12px}
+    .tile-l{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+    .tile-v{font-size:15px;font-weight:700;color:#1a1a2e}
+    .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+    .sec{background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;overflow:hidden}
+    .sec-h{background:#1a1a2e;color:#f0ede8;font-size:12px;padding:8px 12px}
+    .sec-b{padding:10px 12px}
+    .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e9e7e2;font-size:11px}
+    .row:last-child{border-bottom:none}
+    .total{display:flex;justify-content:space-between;padding:9px 12px;background:#1a1a2e;margin:8px -12px -10px}
+    .total span:first-child{color:#c9a96e;font-weight:600;font-size:11px}
+    .total span:last-child{color:#c9a96e;font-size:13px;font-weight:700}
+    .footer{margin-top:16px;font-size:9px;color:#999;border-top:1px solid #e5e3de;padding-top:10px;line-height:1.5}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{margin:1.2cm;size:A4}}
+    </style></head><body>
+    <h1>ChainReady · Property Analysis</h1>
+    <div class="sub">Generated ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</div>
+    <div class="verdict ${s >= 0 ? "ok" : "warn"}">${s >= 0 ? `✓ Cash surplus of ${fmt(s)} after all costs` : `⚠ Cash shortfall of ${fmt(Math.abs(s))} — additional funds needed`}</div>
+    <div class="tiles">
+      <div class="tile"><div class="tile-l">Offer Price</div><div class="tile-v">${fmt(offerPrice)}</div></div>
+      <div class="tile"><div class="tile-l">Deposit</div><div class="tile-v">${fmt(depositAmount)}</div></div>
+      <div class="tile"><div class="tile-l">Stamp Duty</div><div class="tile-v">${fmt(sdlt.total)}</div></div>
+      <div class="tile"><div class="tile-l">Monthly Mortgage</div><div class="tile-v">${fmt(mortgage.monthly)}</div></div>
+      <div class="tile"><div class="tile-l">Net Sale Proceeds</div><div class="tile-v">${fmt(netSaleProceeds)}</div></div>
+      <div class="tile"><div class="tile-l">Surplus / Deficit</div><div class="tile-v" style="color:${s>=0?"#16a34a":"#dc2626"}">${s>=0?"+":""}${fmt(s)}</div></div>
+    </div>
+    <div class="cols">
+      <div class="sec"><div class="sec-h">Cash Needed to Buy</div><div class="sec-b">
+        <div class="row"><span>Deposit (${depositPct}%)</span><span>${fmt(depositAmount)}</span></div>
+        <div class="row"><span>Stamp Duty</span><span>${fmt(sdlt.total)}</span></div>
+        <div class="row"><span>Buyer's Solicitor</span><span>${fmt(buyerSolicitorFee)}</span></div>
+        <div class="row"><span>Survey</span><span>${fmt(surveyFee)}</span></div>
+        <div class="row"><span>Mortgage Arrangement</span><span>${fmt(mortgageArrangement)}</span></div>
+        <div class="row"><span>Removals</span><span>${fmt(removals)}</span></div>
+        <div class="row"><span>Other</span><span>${fmt(otherCosts)}</span></div>
+        <div class="total"><span>TOTAL TO BUY</span><span>${fmt(totalCashNeeded)}</span></div>
+      </div></div>
+      <div class="sec"><div class="sec-h">Cash Available from Sale</div><div class="sec-b">
+        <div class="row"><span>Sale Price</span><span>${fmt(salePrice)}</span></div>
+        <div class="row"><span>Agent Fee (incl. VAT)</span><span>-${fmt(agentFeeTotal)}</span></div>
+        <div class="row"><span>Seller's Solicitor</span><span>-${fmt(sellerSolicitorFee)}</span></div>
+        <div class="row"><span>Mortgage Repaid</span><span>-${fmt(existingMortgage)}</span></div>
+        <div class="row"><span>Net from Sale</span><span>${fmt(netSaleProceeds)}</span></div>
+        <div class="row"><span>Savings</span><span>${fmt(savings)}</span></div>
+        <div class="total"><span>TOTAL AVAILABLE</span><span>${fmt(cashAvailable)}</span></div>
+      </div></div>
+    </div>
+    <div class="footer">Disclaimer: For illustrative purposes only. Not financial, legal or tax advice. SDLT rates reflect HMRC thresholds effective 1 April 2025. Consult a qualified adviser before making decisions.</div>
+    </body></html>`);
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 600);
+  };
+
+  if (!ready) return <Onboarding onComplete={handleOnboardingComplete} theme={theme} />;
+
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "purchase", label: "Purchase" },
+    { id: "sale", label: "Sale" },
+    { id: "mortgage", label: "Mortgage" },
+    { id: "stampdust", label: "Stamp Duty" },
+    { id: "scenario", label: "Scenarios" },
+  ];
+
+  const bg = d ? "#f5f4f0" : "#0f0f13";
+  const surface = d ? "#fff" : "#181820";
+  const border = d ? "#e0ddd8" : "#2a2a38";
+  const text = d ? "#1a1a1a" : "#f0ede8";
+  const muted = d ? "#888" : "#8a87a0";
+  const green = d ? "#16a34a" : "#6ec99a";
+  const red = d ? "#dc2626" : "#e07b6a";
+
+  return (
+    <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: "'DM Sans', 'Outfit', sans-serif", fontSize: 14 }}>
+      <style>{`
+        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#c9a96e;border:2px solid ${bg};cursor:pointer;}
+        input[type=number]{-moz-appearance:textfield;}
+        input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+        *{box-sizing:border-box;margin:0;padding:0;}
+      `}</style>
+
+      {/* Header */}
+      <div style={{ background: surface, borderBottom: `1px solid ${border}`, position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ padding: "12px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <a href="https://fasanya.co.uk" style={{ fontSize: 11, color: muted, textDecoration: "none", letterSpacing: "0.3px", display: "flex", alignItems: "center", gap: 4 }}>
+              ← fasanya.co.uk
+            </a>
+            <span style={{ color: border }}>|</span>
+            <span style={{ fontFamily: "'Georgia', serif", fontSize: 15, fontWeight: 400, color: text, letterSpacing: "0.5px" }}>ChainReady</span>
+            <span style={{ fontSize: 9, color: "#c9a96e", border: "1px solid #c9a96e", padding: "1px 7px", borderRadius: 20, letterSpacing: "0.5px", textTransform: "uppercase" }}>UK · 2026</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Subtle PDF link */}
+            <button onClick={handleExportPDF} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: muted, display: "flex", alignItems: "center", gap: 4, padding: "4px 0", fontFamily: "inherit" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              PDF
+            </button>
+            {/* Theme toggle */}
+            <button onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} style={{ background: d ? "#f0ede8" : "#2a2a38", border: `1px solid ${border}`, borderRadius: 20, padding: "4px 10px", cursor: "pointer", fontSize: 11, color: text, display: "flex", alignItems: "center", gap: 5, fontFamily: "inherit" }}>
+              {d ? "🌙 Dark" : "☀️ Light"}
+            </button>
+          </div>
+        </div>
+        {/* Tabs */}
+        <div style={{ display: "flex", overflowX: "auto", paddingTop: 4 }}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              padding: "8px 15px", fontSize: 12, fontWeight: 500, color: tab === t.id ? "#c9a96e" : muted,
+              border: "none", background: "none", cursor: "pointer", borderBottom: tab === t.id ? "2px solid #c9a96e" : "2px solid transparent",
+              whiteSpace: "nowrap", fontFamily: "inherit", transition: "all 0.15s",
+            }}>{t.label}</button>
           ))}
         </div>
-      );
-    }
+      </div>
 
-    function Card({ title, subtitle, children, accent }) {
-      return (
-        <div className="card" style={accent ? { borderTop: `3px solid ${accent}` } : {}}>
-          <div className="card-header">
-            <h2 className="card-title">{title}</h2>
-            {subtitle && <p className="card-sub">{subtitle}</p>}
-          </div>
-          {children}
-        </div>
-      );
-    }
+      {/* Content */}
+      <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 13 }}>
 
-    function CostRow({ label, value, sub, highlight }) {
-      return (
-        <div className={`cost-row ${highlight ? "highlight" : ""}`}>
-          <span className="cost-label">{label}</span>
-          <div className="cost-right">
-            {sub && <span className="cost-sub">{sub}</span>}
-            <span className="cost-value">{fmt(value)}</span>
-          </div>
-        </div>
-      );
-    }
-
-    // ─── Main App ─────────────────────────────────────────────────────────────
-    function App() {
-      const [tab, setTab] = useState("overview");
-      const printRef = useRef(null);
-
-      const [offerPrice, setOfferPrice] = useState(750000);
-      const [depositPct, setDepositPct] = useState(20);
-      const [buyerType, setBuyerType] = useState("standard");
-      const [mortgageRate, setMortgageRate] = useState(4.5);
-      const [mortgageTerm, setMortgageTerm] = useState(25);
-      const [salePrice, setSalePrice] = useState(420000);
-      const [agentFeePct, setAgentFeePct] = useState(1.5);
-      const [agentFeeVAT, setAgentFeeVAT] = useState(true);
-      const [buyerSolicitorFee, setBuyerSolicitorFee] = useState(2000);
-      const [sellerSolicitorFee, setSellerSolicitorFee] = useState(1500);
-      const [surveyFee, setSurveyFee] = useState(800);
-      const [removals, setRemovals] = useState(1500);
-      const [mortgageArrangement, setMortgageArrangement] = useState(999);
-      const [otherCosts, setOtherCosts] = useState(500);
-      const [existingMortgage, setExistingMortgage] = useState(150000);
-      const [savings, setSavings] = useState(50000);
-
-      const [scenOfferPrice, setScenOfferPrice] = useState(750000);
-      const [scenSalePrice, setScenSalePrice] = useState(420000);
-      const [scenDepositPct, setScenDepositPct] = useState(20);
-      const [scenMortgageRate, setScenMortgageRate] = useState(4.5);
-
-      // Base calcs
-      const depositAmount = useMemo(() => (offerPrice * depositPct) / 100, [offerPrice, depositPct]);
-      const mortgageLoan = useMemo(() => offerPrice - depositAmount, [offerPrice, depositAmount]);
-      const ltv = useMemo(() => (mortgageLoan / offerPrice) * 100, [mortgageLoan, offerPrice]);
-      const sdlt = useMemo(() => calcSDLT(offerPrice, buyerType), [offerPrice, buyerType]);
-      const mortgage = useMemo(() => calcMortgage(mortgageLoan, mortgageRate, mortgageTerm), [mortgageLoan, mortgageRate, mortgageTerm]);
-      const agentFeeBase = useMemo(() => (salePrice * agentFeePct) / 100, [salePrice, agentFeePct]);
-      const agentFeeTotal = useMemo(() => agentFeeBase * (agentFeeVAT ? 1.2 : 1), [agentFeeBase, agentFeeVAT]);
-      const grossSaleProceeds = useMemo(() => salePrice - agentFeeTotal - sellerSolicitorFee, [salePrice, agentFeeTotal, sellerSolicitorFee]);
-      const netSaleProceeds = useMemo(() => grossSaleProceeds - existingMortgage, [grossSaleProceeds, existingMortgage]);
-      const saleEquity = useMemo(() => salePrice - existingMortgage, [salePrice, existingMortgage]);
-      const saleEquityPct = useMemo(() => salePrice > 0 ? (saleEquity / salePrice) * 100 : 0, [saleEquity, salePrice]);
-      const totalBuyingCosts = useMemo(() => sdlt.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts, [sdlt.total, buyerSolicitorFee, surveyFee, removals, mortgageArrangement, otherCosts]);
-      const totalCashNeeded = useMemo(() => depositAmount + totalBuyingCosts, [depositAmount, totalBuyingCosts]);
-      const cashAvailable = useMemo(() => savings + netSaleProceeds, [savings, netSaleProceeds]);
-      const cashSurplusDeficit = useMemo(() => cashAvailable - totalCashNeeded, [cashAvailable, totalCashNeeded]);
-
-      // Scenario calcs
-      const scenDepositAmt = (scenOfferPrice * scenDepositPct) / 100;
-      const scenLoan = scenOfferPrice - scenDepositAmt;
-      const scenSDLT = calcSDLT(scenOfferPrice, buyerType);
-      const scenAgentFee = (scenSalePrice * agentFeePct) / 100 * (agentFeeVAT ? 1.2 : 1);
-      const scenNetSale = scenSalePrice - scenAgentFee - sellerSolicitorFee - existingMortgage;
-      const scenBuyingCosts = scenSDLT.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
-      const scenCashNeeded = scenDepositAmt + scenBuyingCosts;
-      const scenCashAvailable = savings + scenNetSale;
-      const scenSurplus = scenCashAvailable - scenCashNeeded;
-      const scenMortgage = calcMortgage(scenLoan, scenMortgageRate, mortgageTerm);
-      const scenDiff = scenSurplus - cashSurplusDeficit;
-
-      const resetScenario = () => {
-        setScenOfferPrice(offerPrice); setScenSalePrice(salePrice);
-        setScenDepositPct(depositPct); setScenMortgageRate(mortgageRate);
-      };
-
-      const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-
-      const buildPrintHTML = () => {
-        const s = cashSurplusDeficit;
-        const sdltBandsHTML = sdlt.bands.map(b =>
-          `<div class="pr"><span style="color:#555">${b.label}</span><span style="color:#888">${b.rate}%</span><span style="font-weight:600">${fmt(b.tax)}</span></div>`
-        ).join("");
-        const lev = (label, sv, bv, lowerBetter, vd, bd) => {
-          const d = sv - bv;
-          const isGood = lowerBetter ? d <= 0 : d >= 0;
-          const cls = d === 0 ? "neu" : isGood ? "pos" : "neg";
-          const chip = d === 0 ? "Base" : (d > 0 ? "+" : "") + fmt(d);
-          return `<div class="pl"><div class="pll">${label}</div><div class="plr"><span class="plv">${vd}</span><span class="pc ${cls}">${chip}</span></div><div class="plb">Base: ${bd}</div></div>`;
-        };
-        const imp = (label, base, scen, lowerBetter) => {
-          const d = scen - base;
-          const isGood = lowerBetter ? d <= 0 : d >= 0;
-          const cls = d === 0 ? "neu" : isGood ? "pos" : "neg";
-          const chip = d === 0 ? "No change" : (d > 0 ? "+" : "") + fmt(d);
-          return `<div class="pi"><span style="color:#555">${label}</span><div style="display:flex;align-items:center;gap:8px"><span style="color:#999">${fmt(base)} →</span><span style="font-weight:600">${fmt(scen)}</span><span class="pc ${cls}">${chip}</span></div></div>`;
-        };
-        return `<div style="padding:28px 32px;max-width:820px;margin:0 auto;font-family:'DM Sans',sans-serif;font-size:12px;color:#1a1a2e">
-        <div style="background:#0f0f13;color:#f0ede8;padding:20px 24px;border-radius:10px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center">
-          <div><div style="font-size:10px;color:#8a87a0;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Property Transaction Summary</div>
-          <div style="font-family:'Playfair Display',serif;font-size:19px;font-weight:700">Property Analysis Report</div>
-          <div style="margin-top:5px;font-size:9px;border:1px solid #c9a96e;color:#c9a96e;padding:2px 8px;border-radius:20px;display:inline-block;letter-spacing:.5px;text-transform:uppercase">UK · England · ${today}</div></div>
-          <div style="font-size:11px;color:#8a87a0;text-align:right;line-height:1.8"><div>New Home: ${fmt(offerPrice)}</div><div>Current Flat: ${fmt(salePrice)}</div><div>Mortgage: ${fmtPct(mortgageRate)} · ${mortgageTerm}yr</div></div>
-        </div>
-        <div style="border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;${s >= 0 ? "background:#f0fdf4;border:1px solid #86efac" : "background:#fff7f6;border:1px solid #fca5a5"}">
-          <div style="font-size:20px">${s >= 0 ? "✓" : "⚠"}</div>
-          <div><div style="font-weight:700;font-size:13px;color:${s >= 0 ? "#16a34a" : "#dc2626"}">${s >= 0 ? "Cash surplus of " + fmt(s) + " after all costs" : "Cash shortfall of " + fmt(Math.abs(s)) + " — additional funds needed"}</div>
-          <div style="font-size:10px;color:#666;margin-top:2px">${fmt(offerPrice)} offer · ${depositPct}% deposit · ${fmt(salePrice)} sale · ${mortgageRate}% over ${mortgageTerm} years</div></div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
-          ${[
-            ["Offer Price", fmt(offerPrice), "New property", "gold"],
-            ["Deposit Required", fmt(depositAmount), `${depositPct}% · LTV ${fmtPct(ltv)}`, ""],
-            ["Stamp Duty (SDLT)", fmt(sdlt.total), buyerType === "firstTime" ? "First-time buyer" : buyerType === "additional" ? "Additional property" : "Standard", ""],
-            ["Monthly Mortgage", fmt(mortgage.monthly), `${fmtPct(mortgageRate)} · ${mortgageTerm}yr`, ""],
-            ["Net Sale Proceeds", fmt(netSaleProceeds), "After fees & mortgage paydown", ""],
-            ["Cash Surplus/Deficit", (s >= 0 ? "+" : "") + fmt(s), "After all costs", s >= 0 ? "pos" : "neg"]
-          ].map(([l,v,sub,cls]) => `<div style="background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;padding:10px 12px">
-            <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">${l}</div>
-            <div style="font-size:15px;font-family:'Playfair Display',serif;font-weight:700;color:${cls==="gold"?"#b8860b":cls==="pos"?"#16a34a":cls==="neg"?"#dc2626":"#1a1a2e"}">${v}</div>
-            <div style="font-size:9px;color:#888;margin-top:2px">${sub}</div></div>`).join("")}
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-          <div style="background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;overflow:hidden">
-            <div style="background:#1a1a2e;color:#f0ede8;font-family:'Playfair Display',serif;font-size:12px;padding:8px 12px">Cash Needed to Buy</div>
-            <div style="padding:10px 12px">
-              ${[["Deposit ("+depositPct+"%)",fmt(depositAmount)],["Stamp Duty (SDLT)",fmt(sdlt.total)],["Buyer's Solicitor",fmt(buyerSolicitorFee)],["Survey / Valuation",fmt(surveyFee)],["Mortgage Arrangement",fmt(mortgageArrangement)],["Removals",fmt(removals)],["Other Costs",fmt(otherCosts)]].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e9e7e2;font-size:11px"><span style="color:#555">${l}</span><span style="font-weight:600">${v}</span></div>`).join("")}
-              <div style="display:flex;justify-content:space-between;padding:9px 12px;background:#1a1a2e;margin:8px -12px -10px"><span style="color:#c9a96e;font-weight:600;font-size:11px">TOTAL CASH TO BUY</span><span style="color:#c9a96e;font-size:13px;font-family:'Playfair Display',serif;font-weight:700">${fmt(totalCashNeeded)}</span></div>
-            </div>
-          </div>
-          <div style="background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;overflow:hidden">
-            <div style="background:#1a1a2e;color:#f0ede8;font-family:'Playfair Display',serif;font-size:12px;padding:8px 12px">Cash Available from Sale</div>
-            <div style="padding:10px 12px">
-              ${[["Sale Price",fmt(salePrice)],["Agent Fee (incl. VAT)","-"+fmt(agentFeeTotal)],["Seller's Solicitor","-"+fmt(sellerSolicitorFee)],["Existing Mortgage Repaid","-"+fmt(existingMortgage)],["Net Cash from Sale",fmt(netSaleProceeds)],["Savings / Other Cash",fmt(savings)]].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e9e7e2;font-size:11px"><span style="color:#555">${l}</span><span style="font-weight:600">${v}</span></div>`).join("")}
-              <div style="display:flex;justify-content:space-between;padding:9px 12px;background:#1a1a2e;margin:8px -12px -10px"><span style="color:#c9a96e;font-weight:600;font-size:11px">TOTAL CASH AVAILABLE</span><span style="color:#c9a96e;font-size:13px;font-family:'Playfair Display',serif;font-weight:700">${fmt(cashAvailable)}</span></div>
-            </div>
-          </div>
-        </div>
-        <div style="background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;overflow:hidden;margin-bottom:14px">
-          <div style="background:#1a1a2e;color:#f0ede8;font-family:'Playfair Display',serif;font-size:12px;padding:8px 12px">Mortgage Summary</div>
-          <div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
-            ${[["Loan Amount",fmt(mortgageLoan)],["Interest Rate",fmtPct(mortgageRate)],["Monthly Payment",fmt(mortgage.monthly)],["Total Interest",fmt(mortgage.interest)]].map(([l,v])=>`<div><div style="font-size:9px;color:#888;margin-bottom:2px">${l}</div><div style="font-size:13px;font-weight:700;font-family:'Playfair Display',serif">${v}</div></div>`).join("")}
-          </div>
-        </div>
-        <div style="background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;overflow:hidden;margin-bottom:14px">
-          <div style="background:#1a1a2e;color:#f0ede8;font-family:'Playfair Display',serif;font-size:12px;padding:8px 12px">Stamp Duty (SDLT) · England · Post 1 April 2025</div>
-          <div style="padding:10px 12px">${sdltBandsHTML}
-            <div style="display:flex;justify-content:space-between;padding-top:7px;border-top:1px solid #e9e7e2;font-weight:700;font-size:11px"><span>Total SDLT</span><span style="color:#b8860b;font-size:13px;font-family:'Playfair Display',serif">${fmt(sdlt.total)}</span></div>
-          </div>
-        </div>
-        <div style="background:#f0f4ff;border:1px solid #c7d7f9;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-          <div style="font-family:'Playfair Display',serif;font-size:12px;font-weight:700;margin-bottom:8px">Scenario Analysis</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:7px;margin-bottom:10px">
-            ${lev("Offer Price", scenOfferPrice, offerPrice, true, fmt(scenOfferPrice), fmt(offerPrice))}
-            ${lev("Sale Price", scenSalePrice, salePrice, false, fmt(scenSalePrice), fmt(salePrice))}
-            ${lev("Deposit %", scenDepositPct, depositPct, true, scenDepositPct+"% = "+fmt(scenDepositAmt), depositPct+"%")}
-            ${lev("Mortgage Rate", scenMortgageRate, mortgageRate, true, scenMortgageRate+"%", mortgageRate+"%")}
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:10px">
-            <div style="background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;padding:9px 10px;text-align:center">
-              <div style="font-size:8px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;color:#64748b">Base Case</div>
-              <div style="font-size:14px;font-weight:700;font-family:'Playfair Display',serif;color:${cashSurplusDeficit>=0?"#16a34a":"#dc2626"}">${cashSurplusDeficit>=0?"+":""}${fmt(cashSurplusDeficit)}</div>
-              <div style="font-size:9px;color:#888;margin-top:2px">${fmt(mortgage.monthly)}/mo</div>
-            </div>
-            <div style="background:#1a1a2e;border-radius:6px;padding:9px 10px;text-align:center">
-              <div style="font-size:8px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;color:#c9a96e">Scenario</div>
-              <div style="font-size:14px;font-weight:700;font-family:'Playfair Display',serif;color:${scenSurplus>=0?"#6ec99a":"#e07b6a"}">${scenSurplus>=0?"+":""}${fmt(scenSurplus)}</div>
-              <div style="font-size:9px;color:#8a87a0;margin-top:2px">${fmt(scenMortgage.monthly)}/mo</div>
-            </div>
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:9px 10px;text-align:center">
-              <div style="font-size:8px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;color:#64748b">Change vs Base</div>
-              <div style="font-size:14px;font-weight:700;font-family:'Playfair Display',serif;color:${scenDiff>=0?"#16a34a":"#dc2626"}">${scenDiff>=0?"+":""}${fmt(scenDiff)}</div>
-              <div style="font-size:9px;color:${scenMortgage.monthly>mortgage.monthly?"#dc2626":"#16a34a"};margin-top:2px">${scenMortgage.monthly===mortgage.monthly?"No monthly change":(scenMortgage.monthly>mortgage.monthly?"+":"")+fmt(scenMortgage.monthly-mortgage.monthly)+"/mo"}</div>
-            </div>
-          </div>
-          <div style="background:#fff;border-radius:5px;border:1px solid #c7d7f9;padding:8px 10px">
-            ${imp("Total Cash Needed", totalCashNeeded, scenCashNeeded, true)}
-            ${imp("Total Cash Available", cashAvailable, scenCashAvailable, false)}
-            ${imp("Deposit Required", depositAmount, scenDepositAmt, true)}
-            ${imp("Stamp Duty (SDLT)", sdlt.total, scenSDLT.total, true)}
-            ${imp("Monthly Mortgage", mortgage.monthly, scenMortgage.monthly, true)}
-          </div>
-        </div>
-        <div style="margin-top:14px;font-size:9px;color:#999;border-top:1px solid #e5e3de;padding-top:10px;line-height:1.5">
-          <strong>Disclaimer:</strong> This report is for illustrative purposes only and does not constitute financial, legal or tax advice. SDLT rates reflect HMRC thresholds effective 1 April 2025. Mortgage figures assume capital repayment basis. Consult a qualified solicitor, mortgage adviser and tax professional before making any decisions.
-        </div></div>`;
-      };
-
-      const handleExportPDF = () => {
-        if (printRef.current) printRef.current.innerHTML = buildPrintHTML();
-        const win = window.open("", "_blank");
-        if (!win) return;
-        win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Property Summary</title>
-          <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-          <style>
-            *{box-sizing:border-box;margin:0;padding:0}body{font-family:'DM Sans',sans-serif;background:#fff;color:#1a1a2e}
-            .pr{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e9e7e2;font-size:10px}.pr:last-child{border-bottom:none}
-            .pl{background:#fff;border:1px solid #c7d7f9;border-radius:5px;padding:7px 9px}
-            .pll{font-size:9px;color:#666;margin-bottom:3px}.plr{display:flex;justify-content:space-between;align-items:center}
-            .plv{font-size:11px;font-weight:700}.plb{font-size:9px;color:#999;margin-top:2px}
-            .pc{font-size:9px;font-weight:600;padding:1px 5px;border-radius:8px}
-            .pc.pos{background:#dcfce7;color:#16a34a}.pc.neg{background:#fee2e2;color:#dc2626}.pc.neu{background:#f1f5f9;color:#64748b}
-            .pi{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #dde3f0;font-size:10px}.pi:last-child{border-bottom:none}
-            @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{margin:1cm;size:A4}}
-          </style></head><body>${buildPrintHTML()}</body></html>`);
-        win.document.close();
-        setTimeout(() => { win.focus(); win.print(); }, 700);
-      };
-
-      const tabs = [
-        { id: "overview", label: "Overview" },
-        { id: "purchase", label: "Purchase" },
-        { id: "sale", label: "Sale" },
-        { id: "mortgage", label: "Mortgage" },
-        { id: "stampdust", label: "Stamp Duty" },
-        { id: "scenario", label: "Scenarios" },
-      ];
-
-      return (
-        <div className="app">
-          <style>{`
-            .app{min-height:100vh;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px}
-            .header{padding:20px 22px 0;border-bottom:1px solid var(--border);background:var(--surface)}
-            .header-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
-            .header-left{display:flex;align-items:baseline;gap:10px}
-            .header h1{font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:var(--text);letter-spacing:-0.3px}
-            .header-badge{font-size:10px;font-weight:500;color:var(--accent);border:1px solid var(--accent);padding:2px 8px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase}
-            .pdf-btn{display:flex;align-items:center;gap:7px;padding:7px 14px;background:var(--accent);color:#0f0f13;border:none;border-radius:8px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:opacity .15s;white-space:nowrap;flex-shrink:0}
-            .pdf-btn:hover{opacity:.85}
-            .tabs{display:flex;overflow-x:auto}
-            .tab{padding:9px 16px;font-size:12px;font-weight:500;color:var(--muted);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;font-family:'DM Sans',sans-serif}
-            .tab:hover{color:var(--text)}.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-            .content{padding:16px 18px;display:flex;flex-direction:column;gap:13px}
-            .two-col{display:grid;grid-template-columns:1fr 1fr;gap:13px}
-            @media(max-width:660px){.two-col{grid-template-columns:1fr}}
-            .summary-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:9px}
-            .summary-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
-            .summary-tile-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
-            .summary-tile-value{font-size:18px;font-family:'Playfair Display',serif;font-weight:700}
-            .summary-tile-value.positive{color:var(--green)}.summary-tile-value.negative{color:var(--red)}.summary-tile-value.accent{color:var(--accent)}
-            .summary-tile-sub{font-size:10px;color:var(--muted);margin-top:3px}
-            .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-            .card-header{padding:13px 15px 9px;border-bottom:1px solid var(--border)}
-            .card-title{font-family:'Playfair Display',serif;font-size:13px;font-weight:500;color:var(--text)}
-            .card-sub{font-size:11px;color:var(--muted);margin-top:2px}
-            .card-body{padding:13px 15px}
-            .slider-wrap{margin-bottom:14px}
-            .slider-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
-            .slider-label{font-size:12px;color:var(--muted)}.slider-value{font-size:13px;font-weight:600;color:var(--text)}
-            .slider-hint{font-size:11px;color:var(--muted);margin-bottom:4px}
-            .slider-track-wrap{position:relative;height:5px;background:var(--border);border-radius:3px;margin:6px 0 3px}
-            .slider-fill{position:absolute;height:100%;background:var(--accent);border-radius:3px;pointer-events:none}
-            .slider{position:absolute;top:50%;left:0;width:100%;-webkit-appearance:none;appearance:none;height:5px;background:transparent;transform:translateY(-50%);cursor:pointer}
-            .slider::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);box-shadow:0 0 0 1px var(--accent);cursor:pointer}
-            .slider-bounds{display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
-            .pill-toggle{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px}
-            .pill{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif}
-            .pill:hover{border-color:var(--accent);color:var(--accent)}.pill.active{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-            .cost-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
-            .cost-row:last-child{border-bottom:none}
-            .cost-row.highlight{background:rgba(201,169,110,.06);margin:0 -15px;padding:10px 15px;border-bottom:none;border-top:1px solid var(--border)}
-            .cost-label{font-size:12px;color:var(--muted)}.cost-right{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
-            .cost-sub{font-size:10px;color:var(--muted)}.cost-value{font-size:13px;font-weight:600;color:var(--text)}
-            .cost-row.highlight .cost-label{color:var(--text);font-weight:600}.cost-row.highlight .cost-value{color:var(--accent);font-size:14px}
-            .sdlt-band{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
-            .sdlt-band:last-child{border-bottom:none}
-            .sdlt-band-bar-wrap{flex:1;height:4px;background:var(--border);border-radius:2px}
-            .sdlt-band-bar{height:100%;background:var(--accent2);border-radius:2px}
-            .sdlt-band-label{font-size:11px;color:var(--muted);width:165px;flex-shrink:0}
-            .sdlt-band-rate{font-size:11px;font-weight:600;color:var(--accent2);width:30px;flex-shrink:0;text-align:right}
-            .sdlt-band-tax{font-size:11px;font-weight:600;color:var(--text);width:72px;flex-shrink:0;text-align:right}
-            .toggle-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0}
-            .toggle-label{font-size:12px;color:var(--muted)}
-            .toggle{position:relative;width:32px;height:18px}
-            .toggle input{opacity:0;width:0;height:0}
-            .toggle-track{position:absolute;inset:0;background:var(--border);border-radius:10px;cursor:pointer;transition:background .2s}
-            .toggle input:checked+.toggle-track{background:var(--accent)}
-            .toggle-track::after{content:'';position:absolute;width:12px;height:12px;border-radius:50%;background:white;top:3px;left:3px;transition:transform .2s}
-            .toggle input:checked+.toggle-track::after{transform:translateX(14px)}
-            .num-input-wrap{margin-bottom:10px}
-            .num-input-label{font-size:11px;color:var(--muted);margin-bottom:3px;display:block}
-            .num-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:7px 10px;border-radius:7px;outline:none;transition:border-color .15s}
-            .num-input:focus{border-color:var(--accent)}
-            .mortgage-bar{height:7px;border-radius:4px;background:var(--border);overflow:hidden;margin:6px 0}
-            .mortgage-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
-            .info-box{background:rgba(201,169,110,.07);border:1px solid rgba(201,169,110,.2);border-radius:7px;padding:9px 12px;font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6}
-            .info-box strong{color:var(--accent)}
-            .verdict{border-radius:var(--radius);padding:13px 16px;display:flex;align-items:center;gap:12px}
-            .verdict.ok{background:rgba(110,201,154,.1);border:1px solid rgba(110,201,154,.25)}
-            .verdict.warn{background:rgba(224,123,106,.1);border:1px solid rgba(224,123,106,.25)}
-            .verdict-icon{font-size:22px}.verdict-title{font-weight:600;font-size:13px}.verdict-sub{font-size:11px;color:var(--muted);margin-top:2px}
-            .verdict.ok .verdict-title{color:var(--green)}.verdict.warn .verdict-title{color:var(--red)}
-            .scen-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-            .scen-header-text h3{font-family:'Playfair Display',serif;font-size:14px;font-weight:500;color:var(--text)}
-            .scen-header-text p{font-size:11px;color:var(--muted);margin-top:2px}
-            .scen-reset-btn{font-size:11px;color:var(--muted);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
-            .scen-reset-btn:hover{border-color:var(--accent);color:var(--accent)}
-            .scen-levers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-            @media(max-width:600px){.scen-levers{grid-template-columns:1fr}}
-            .lever-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
-            .lever-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
-            .lever-card-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
-            .lever-card-value{font-size:19px;font-family:'Playfair Display',serif;font-weight:700;color:var(--text)}
-            .lever-card-sub{font-size:11px;color:var(--muted);margin-top:1px}
-            .lever-chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;flex-shrink:0}
-            .lever-chip.pos{background:rgba(110,201,154,.15);color:var(--green)}
-            .lever-chip.neg{background:rgba(224,123,106,.15);color:var(--red)}
-            .lever-chip.neu{background:rgba(138,135,160,.12);color:var(--muted)}
-            .lever-insight{font-size:10px;color:var(--muted);margin-top:6px;border-top:1px solid var(--border);padding-top:6px}
-            .outcome-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-            .outcome-panel-header{padding:12px 15px;border-bottom:1px solid var(--border)}
-            .outcome-panel-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-            .outcome-boxes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
-            .outcome-box{padding:16px 14px;text-align:center}
-            .outcome-box+.outcome-box{border-left:1px solid var(--border)}
-            .outcome-box.scenario{background:rgba(201,169,110,.05)}
-            .outcome-box-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px}
-            .outcome-box.scenario .outcome-box-label{color:var(--accent)}
-            .outcome-big{font-size:22px;font-family:'Playfair Display',serif;font-weight:700}
-            .outcome-big.pos{color:var(--green)}.outcome-big.neg{color:var(--red)}
-            .outcome-box-sub{font-size:10px;color:var(--muted);margin-top:4px}
-            .outcome-impact{padding:10px 15px}
-            .impact-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
-            .impact-row:last-child{border-bottom:none}
-            .impact-label{font-size:12px;color:var(--muted)}
-            .impact-right{display:flex;align-items:center;gap:9px}
-            .impact-base{font-size:11px;color:var(--muted)}
-            .impact-arrow{font-size:11px;color:var(--muted)}
-            .impact-scen{font-size:13px;font-weight:600;color:var(--text)}
-            .impact-chip{font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px}
-            .impact-chip.pos{background:rgba(110,201,154,.15);color:var(--green)}
-            .impact-chip.neg{background:rgba(224,123,106,.15);color:var(--red)}
-            .impact-chip.neu{background:rgba(138,135,160,.12);color:var(--muted)}
-            .print-source{display:none}
-          `}</style>
-
-          <div className="print-source" ref={printRef} />
-
-          <div className="header">
-            <div className="header-top">
-              <div className="header-left">
-                <h1>Property Transaction Dashboard</h1>
-                <span className="header-badge">UK · London · 2026</span>
+        {/* OVERVIEW */}
+        {tab === "overview" && (<>
+          {/* Verdict */}
+          <div style={{ borderRadius: 12, padding: "13px 16px", display: "flex", alignItems: "center", gap: 12, background: cashSurplusDeficit >= 0 ? (d ? "rgba(22,163,74,0.08)" : "rgba(110,201,154,0.1)") : (d ? "rgba(220,38,38,0.08)" : "rgba(224,123,106,0.1)"), border: `1px solid ${cashSurplusDeficit >= 0 ? (d ? "rgba(22,163,74,0.3)" : "rgba(110,201,154,0.25)") : (d ? "rgba(220,38,38,0.3)" : "rgba(224,123,106,0.25)")}` }}>
+            <span style={{ fontSize: 20 }}>{cashSurplusDeficit >= 0 ? "✓" : "⚠"}</span>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: cashSurplusDeficit >= 0 ? green : red }}>
+                {cashSurplusDeficit >= 0 ? `You're ${fmt(cashSurplusDeficit)} ahead after all costs` : `Shortfall of ${fmt(Math.abs(cashSurplusDeficit))} — review your numbers`}
               </div>
-              <button className="pdf-btn" onClick={handleExportPDF}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                Export PDF
-              </button>
+              <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>Based on current inputs · Use Scenarios tab to stress-test</div>
             </div>
-            <div className="tabs">
-              {tabs.map(t => (
-                <button key={t.id} className={`tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>{t.label}</button>
+          </div>
+
+          {/* Summary tiles */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 9 }}>
+            {[
+              { label: "Offer Price", value: fmt(offerPrice), sub: "New property", accent: true },
+              { label: "Deposit", value: fmt(depositAmount), sub: `${depositPct}% · LTV ${fmtPct(ltv)}` },
+              { label: "Stamp Duty", value: fmt(sdlt.total), sub: buyerType === "firstTime" ? "First-time buyer" : buyerType === "additional" ? "Additional property" : "Standard" },
+              { label: "Monthly Payment", value: fmt(mortgage.monthly), sub: `${fmtPct(mortgageRate)} · ${mortgageTerm}yr` },
+              { label: "Net Sale Proceeds", value: fmt(netSaleProceeds), sub: `Equity: ${fmt(saleEquity)}` },
+              { label: "Cash Surplus/Deficit", value: (cashSurplusDeficit >= 0 ? "+" : "") + fmt(cashSurplusDeficit), sub: "After all costs", pos: cashSurplusDeficit >= 0, neg: cashSurplusDeficit < 0 },
+            ].map((t, i) => (
+              <div key={i} style={{ background: surface, border: `1px solid ${border}`, borderRadius: 12, padding: "11px 13px" }}>
+                <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{t.label}</div>
+                <div style={{ fontSize: 17, fontFamily: "'Georgia', serif", fontWeight: 700, color: t.accent ? "#c9a96e" : t.pos ? green : t.neg ? red : text }}>{t.value}</div>
+                {t.sub && <div style={{ fontSize: 10, color: muted, marginTop: 3 }}>{t.sub}</div>}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
+            <Card title="Cash Needed to Buy" accent="#e07b6a" theme={theme}>
+              <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} theme={theme} />
+              <CostRow label="Stamp Duty" value={sdlt.total} theme={theme} />
+              <CostRow label="Buyer's Solicitor" value={buyerSolicitorFee} theme={theme} />
+              <CostRow label="Survey" value={surveyFee} theme={theme} />
+              <CostRow label="Mortgage Arrangement" value={mortgageArrangement} theme={theme} />
+              <CostRow label="Removals" value={removals} theme={theme} />
+              <CostRow label="Other" value={otherCosts} theme={theme} />
+              <CostRow label="TOTAL TO BUY" value={totalCashNeeded} highlight theme={theme} />
+            </Card>
+            <Card title="Cash Available from Sale" accent="#6ec99a" theme={theme}>
+              <CostRow label="Sale Price" value={salePrice} theme={theme} />
+              <CostRow label="Agent Fee" value={-agentFeeTotal} sub={`${agentFeePct}%${agentFeeVAT?" +VAT":""}`} theme={theme} />
+              <CostRow label="Seller's Solicitor" value={-sellerSolicitorFee} theme={theme} />
+              <CostRow label="Mortgage Repaid" value={-existingMortgage} theme={theme} />
+              <CostRow label="Net from Sale" value={netSaleProceeds} highlight theme={theme} />
+              <div style={{ marginTop: 6 }}>
+                <CostRow label="Savings" value={savings} theme={theme} />
+                <CostRow label="TOTAL AVAILABLE" value={cashAvailable} highlight theme={theme} />
+              </div>
+            </Card>
+          </div>
+
+          <div style={{ background: d ? "rgba(201,169,110,0.07)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, padding: "9px 12px", fontSize: 11, color: d ? "#7a6030" : "#8a87a0", lineHeight: 1.6 }}>
+            <strong style={{ color: "#c9a96e" }}>SDLT (post April 2025):</strong> 0% up to £125k · 2% up to £250k · 5% up to £925k · 10% up to £1.5m · 12% above. Additional property +5%.
+          </div>
+          <button onClick={() => setReady(false)} style={{ alignSelf: "flex-start", background: "none", border: `1px solid ${border}`, borderRadius: 6, padding: "5px 12px", fontSize: 11, color: muted, cursor: "pointer", fontFamily: "inherit" }}>← Edit my numbers</button>
+        </>)}
+
+        {/* PURCHASE */}
+        {tab === "purchase" && (<>
+          <Card title="Purchase Details" theme={theme}>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Buyer Type</div>
+              <PillToggle options={[{ value: "standard", label: "Standard" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional Property" }]} value={buyerType} onChange={setBuyerType} theme={theme} />
+            </div>
+            <SliderInput label="Offer / Purchase Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} theme={theme} />
+            <SliderInput label="Deposit %" value={depositPct} onChange={setDepositPct} min={5} max={50} step={1} prefix="" suffix="%" theme={theme} />
+          </Card>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
+            <Card title="Deposit & Loan" theme={theme}>
+              <CostRow label="Offer Price" value={offerPrice} theme={theme} />
+              <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} theme={theme} />
+              <CostRow label="Mortgage Required" value={mortgageLoan} highlight theme={theme} />
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>LTV {fmtPct(ltv)}</div>
+                <div style={{ height: 7, borderRadius: 4, background: d ? "#e0ddd8" : "#2a2a38", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${ltv}%`, background: "linear-gradient(90deg,#c9a96e,#7eb8b0)" }} />
+                </div>
+              </div>
+            </Card>
+            <Card title="Buying Costs" theme={theme}>
+              {[["Solicitor (£)", buyerSolicitorFee, setBuyerSolicitorFee],["Survey (£)", surveyFee, setSurveyFee],["Mortgage Arrangement (£)", mortgageArrangement, setMortgageArrangement],["Removals (£)", removals, setRemovals],["Other (£)", otherCosts, setOtherCosts]].map(([l,v,fn]) => (
+                <div key={l} style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>{l}</label>
+                  <input type="number" value={v} onChange={e => fn(Number(e.target.value))} style={{ width: "100%", background: d ? "#f8f7f5" : "#1e1e28", border: `1px solid ${border}`, color: text, fontFamily: "inherit", fontSize: 13, padding: "7px 10px", borderRadius: 7, outline: "none" }} />
+                </div>
+              ))}
+            </Card>
+          </div>
+        </>)}
+
+        {/* SALE */}
+        {tab === "sale" && (<>
+          <Card title="Current Flat Sale" theme={theme}>
+            <SliderInput label="Expected Sale Price" value={salePrice} onChange={setSalePrice} min={100000} max={2000000} step={5000} theme={theme} />
+            <SliderInput label="Existing Mortgage" value={existingMortgage} onChange={setExistingMortgage} min={0} max={Math.min(salePrice,1500000)} step={5000} hint={`Equity: ${fmt(saleEquity)} (${saleEquityPct.toFixed(1)}%)`} theme={theme} />
+            <SliderInput label="Agent Fee %" value={agentFeePct} onChange={setAgentFeePct} min={0.5} max={3.5} step={0.1} prefix="" suffix="%" hint="Typical London: 1.0–2.0%" theme={theme} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0" }}>
+              <div>
+                <div style={{ fontSize: 12, color: muted }}>Agent Fee includes VAT (20%)</div>
+              </div>
+              <div onClick={() => setAgentFeeVAT(v => !v)} style={{ width: 32, height: 18, borderRadius: 10, background: agentFeeVAT ? "#c9a96e" : (d ? "#ddd" : "#2a2a38"), cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                <div style={{ position: "absolute", width: 12, height: 12, borderRadius: "50%", background: "#fff", top: 3, left: agentFeeVAT ? 17 : 3, transition: "left 0.2s" }} />
+              </div>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              {[["Seller's Solicitor (£)", sellerSolicitorFee, setSellerSolicitorFee],["Additional Savings (£)", savings, setSavings]].map(([l,v,fn]) => (
+                <div key={l} style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>{l}</label>
+                  <input type="number" value={v} onChange={e => fn(Number(e.target.value))} style={{ width: "100%", background: d ? "#f8f7f5" : "#1e1e28", border: `1px solid ${border}`, color: text, fontFamily: "inherit", fontSize: 13, padding: "7px 10px", borderRadius: 7, outline: "none" }} />
+                </div>
               ))}
             </div>
+          </Card>
+          <Card title="Sale Proceeds Breakdown" theme={theme}>
+            <CostRow label="Gross Sale Price" value={salePrice} theme={theme} />
+            <CostRow label="Agent Fee (excl VAT)" value={-agentFeeBase} sub={`${agentFeePct}%`} theme={theme} />
+            {agentFeeVAT && <CostRow label="VAT on Agent Fee" value={-(agentFeeTotal - agentFeeBase)} theme={theme} />}
+            <CostRow label="Seller's Solicitor" value={-sellerSolicitorFee} theme={theme} />
+            <CostRow label="Gross Proceeds" value={grossSaleProceeds} highlight theme={theme} />
+            <div style={{ marginTop: 6 }}>
+              <CostRow label="Mortgage Repaid" value={-existingMortgage} theme={theme} />
+              <CostRow label="Net Cash from Sale" value={netSaleProceeds} highlight theme={theme} />
+            </div>
+            <div style={{ height: 8, borderRadius: 4, background: d ? "#e0ddd8" : "#2a2a38", overflow: "hidden", margin: "14px 0 4px" }}>
+              <div style={{ height: "100%", width: `${Math.min(100,Math.max(0,saleEquityPct))}%`, background: "linear-gradient(90deg,#c9a96e,#7eb8b0)" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: muted }}>
+              <span>Equity {fmt(saleEquity)} ({saleEquityPct.toFixed(1)}%)</span>
+              <span>Mortgage {fmt(existingMortgage)}</span>
+            </div>
+          </Card>
+        </>)}
+
+        {/* MORTGAGE */}
+        {tab === "mortgage" && (<>
+          <Card title="Mortgage Calculator" subtitle="Rate pre-filled from today's best 5-yr fixed market rate" theme={theme}>
+            <SliderInput label="Interest Rate" value={mortgageRate} onChange={setMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" hint="Pre-filled: best 5-yr fixed May 2026 (4.73%, Nationwide). Adjust to match your quote." theme={theme} />
+            <SliderInput label="Term" value={mortgageTerm} onChange={setMortgageTerm} min={5} max={35} step={1} prefix="" suffix=" years" theme={theme} />
+          </Card>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
+            <Card title="Monthly Repayment" theme={theme}>
+              <div style={{ textAlign: "center", padding: "14px 0" }}>
+                <div style={{ fontSize: 10, color: muted, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>Monthly Payment</div>
+                <div style={{ fontSize: 34, fontFamily: "'Georgia', serif", color: "#c9a96e", fontWeight: 700 }}>{fmt(mortgage.monthly)}</div>
+                <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>per month · {mortgageTerm} years</div>
+              </div>
+              <CostRow label="Loan Amount" value={mortgageLoan} theme={theme} />
+              <CostRow label="Total Repaid" value={mortgage.total} theme={theme} />
+              <CostRow label="Total Interest" value={mortgage.interest} theme={theme} />
+            </Card>
+            <Card title="Rate Sensitivity" theme={theme}>
+              {[[-1,-0.5,0,0.5,1]].flat().map(delta => {
+                const m = calcMortgage(mortgageLoan, mortgageRate + delta, mortgageTerm);
+                const diff = m.monthly - mortgage.monthly;
+                return (
+                  <div key={delta} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${border}`, fontSize: 12 }}>
+                    <span style={{ color: muted }}>{delta === 0 ? "Base rate" : `${delta > 0 ? "+" : ""}${delta}%`} ({fmtPct(mortgageRate + delta)})</span>
+                    <span style={{ fontWeight: 600, color: delta === 0 ? "#c9a96e" : diff > 0 ? red : green }}>{delta === 0 ? fmt(mortgage.monthly) : `${diff > 0 ? "+" : ""}${fmt(diff)}/mo`}</span>
+                  </div>
+                );
+              })}
+            </Card>
+          </div>
+        </>)}
+
+        {/* STAMP DUTY */}
+        {tab === "stampdust" && (<>
+          <Card title="Stamp Duty Land Tax" subtitle="England & NI · Post 1 April 2025 · Source: HMRC" theme={theme}>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Buyer Type</div>
+              <PillToggle options={[{ value: "standard", label: "Standard" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional (+5%)" }]} value={buyerType} onChange={setBuyerType} theme={theme} />
+            </div>
+            <SliderInput label="Property Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} theme={theme} />
+          </Card>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
+            <Card title="Band Breakdown" accent="#7eb8b0" theme={theme}>
+              {sdlt.bands.map((b, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${border}` }}>
+                  <span style={{ fontSize: 11, color: muted, width: 160, flexShrink: 0 }}>{b.label}</span>
+                  <div style={{ flex: 1, height: 4, background: d ? "#e0ddd8" : "#2a2a38", borderRadius: 2 }}>
+                    <div style={{ height: "100%", width: `${sdlt.total > 0 ? Math.min(100, b.tax / sdlt.total * 100) : 0}%`, background: "#7eb8b0", borderRadius: 2 }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#7eb8b0", width: 28, textAlign: "right" }}>{b.rate}%</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: text, width: 70, textAlign: "right" }}>{fmt(b.tax)}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "11px 0 0", borderTop: `1px solid ${border}`, marginTop: 6 }}>
+                <span style={{ fontWeight: 600, fontSize: 12, color: text }}>Total SDLT</span>
+                <span style={{ fontWeight: 700, fontSize: 16, color: "#c9a96e", fontFamily: "'Georgia', serif" }}>{fmt(sdlt.total)}</span>
+              </div>
+            </Card>
+            <Card title="Rate Table" theme={theme}>
+              <div style={{ fontSize: 10, color: muted, marginBottom: 8 }}>Standard Residential · Post 1 April 2025</div>
+              {[["£0 – £125,000","0%"],["£125,001 – £250,000","2%"],["£250,001 – £925,000","5%"],["£925,001 – £1,500,000","10%"],["Above £1,500,000","12%"]].map(([b,r]) => (
+                <div key={b} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${border}`, fontSize: 11 }}>
+                  <span style={{ color: muted }}>{b}</span><span style={{ fontWeight: 600, color: "#7eb8b0" }}>{r}</span>
+                </div>
+              ))}
+              <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 8, background: d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: muted, lineHeight: 1.6 }}>
+                <strong style={{ color: "#c9a96e" }}>First-Time:</strong> 0% to £300k · 5% £300k–£500k<br />
+                <strong style={{ color: "#c9a96e" }}>Additional:</strong> +5% surcharge all bands
+              </div>
+            </Card>
+          </div>
+        </>)}
+
+        {/* SCENARIO */}
+        {tab === "scenario" && (<>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontFamily: "'Georgia', serif", fontSize: 14, color: text }}>Adjust the levers below</div>
+              <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>See the cash impact in real time</div>
+            </div>
+            <button onClick={resetScenario} style={{ fontSize: 11, color: muted, background: "none", border: `1px solid ${border}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit" }}>↺ Reset</button>
           </div>
 
-          <div className="content">
-
-            {/* OVERVIEW */}
-            {tab === "overview" && (
-              <>
-                <div className={`verdict ${cashSurplusDeficit >= 0 ? "ok" : "warn"}`}>
-                  <div className="verdict-icon">{cashSurplusDeficit >= 0 ? "✓" : "⚠"}</div>
-                  <div>
-                    <div className="verdict-title">
-                      {cashSurplusDeficit >= 0 ? `You're ${fmt(cashSurplusDeficit)} ahead after all costs` : `Shortfall of ${fmt(Math.abs(cashSurplusDeficit))} — review your numbers`}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { label: "Offer Price", val: scenOfferPrice, set: setScenOfferPrice, base: offerPrice, min: Math.max(50000, offerPrice-250000), max: offerPrice+300000, step: 5000, lowerBetter: true, sub: () => `Deposit: ${fmt(scenDepositAmt)} · SDLT: ${fmt(scenSDLT.total)}`, insight: "↑ offer = more deposit & SDLT" },
+              { label: "Sale Price", val: scenSalePrice, set: setScenSalePrice, base: salePrice, min: Math.max(50000, salePrice-200000), max: salePrice+200000, step: 5000, lowerBetter: false, sub: () => `Net: ${fmt(scenNetSale)}`, insight: "↑ sale = more cash available" },
+              { label: "Deposit %", val: scenDepositPct, set: setScenDepositPct, base: depositPct, min: 5, max: 50, step: 1, prefix: "", suffix: "%", lowerBetter: true, sub: () => `${fmt(scenDepositAmt)} · LTV ${fmtPct(100-scenDepositPct)}`, insight: "↑ deposit = less mortgage, more upfront" },
+              { label: "Mortgage Rate", val: scenMortgageRate, set: setScenMortgageRate, base: mortgageRate, min: 1, max: 10, step: 0.05, prefix: "", suffix: "%", lowerBetter: true, sub: () => `${fmt(scenMortgage.monthly)}/mo`, insight: "↑ rate = higher monthly cost" },
+            ].map(({ label, val, set, base, min, max, step, prefix = "£", suffix = "", lowerBetter, sub, insight }) => {
+              const d2 = val - base;
+              const chip = d2 === 0 ? "neu" : (lowerBetter ? d2 < 0 : d2 > 0) ? "pos" : "neg";
+              const chipColor = chip === "neu" ? muted : chip === "pos" ? green : red;
+              return (
+                <div key={label} style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 3 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontFamily: "'Georgia', serif", fontWeight: 700, color: text }}>{prefix}{val.toLocaleString("en-GB")}{suffix}</div>
+                      <div style={{ fontSize: 11, color: muted, marginTop: 1 }}>{sub()}</div>
                     </div>
-                    <div className="verdict-sub">Based on current inputs · Use Scenarios tab to stress-test</div>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: `${chipColor}22`, color: chipColor }}>
+                      {d2 === 0 ? "Base" : `${d2 > 0 ? "+" : ""}${prefix}${Math.abs(d2).toLocaleString("en-GB")}${suffix}`}
+                    </span>
                   </div>
+                  <SliderInput value={val} onChange={set} min={min} max={max} step={step} prefix={prefix} suffix={suffix} theme={theme} />
+                  <div style={{ fontSize: 10, color: muted, marginTop: 4, borderTop: `1px solid ${border}`, paddingTop: 6 }}>{insight} · Base: {prefix}{base.toLocaleString("en-GB")}{suffix}</div>
                 </div>
-                <div className="summary-bar">
-                  <div className="summary-tile"><div className="summary-tile-label">Offer Price</div><div className="summary-tile-value accent">{fmt(offerPrice)}</div><div className="summary-tile-sub">New property</div></div>
-                  <div className="summary-tile"><div className="summary-tile-label">Deposit</div><div className="summary-tile-value">{fmt(depositAmount)}</div><div className="summary-tile-sub">{depositPct}% · LTV {fmtPct(ltv)}</div></div>
-                  <div className="summary-tile"><div className="summary-tile-label">Stamp Duty</div><div className="summary-tile-value">{fmt(sdlt.total)}</div><div className="summary-tile-sub">{buyerType === "firstTime" ? "First-time buyer" : buyerType === "additional" ? "Additional property" : "Standard"}</div></div>
-                  <div className="summary-tile"><div className="summary-tile-label">Monthly Payment</div><div className="summary-tile-value">{fmt(mortgage.monthly)}</div><div className="summary-tile-sub">{fmtPct(mortgageRate)} · {mortgageTerm}yr</div></div>
-                  <div className="summary-tile"><div className="summary-tile-label">Sale Price</div><div className="summary-tile-value">{fmt(salePrice)}</div><div className="summary-tile-sub">Equity: {fmt(saleEquity)} · Net: {fmt(netSaleProceeds)}</div></div>
-                  <div className="summary-tile"><div className="summary-tile-label">Cash Surplus / Deficit</div><div className={`summary-tile-value ${cashSurplusDeficit >= 0 ? "positive" : "negative"}`}>{cashSurplusDeficit >= 0 ? "+" : ""}{fmt(cashSurplusDeficit)}</div><div className="summary-tile-sub">After all costs</div></div>
-                </div>
-                <div className="two-col">
-                  <Card title="Cash Needed to Buy" accent="var(--accent3)">
-                    <div className="card-body">
-                      <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}% of offer`} />
-                      <CostRow label="Stamp Duty (SDLT)" value={sdlt.total} />
-                      <CostRow label="Buyer's Solicitor" value={buyerSolicitorFee} />
-                      <CostRow label="Survey / Valuation" value={surveyFee} />
-                      <CostRow label="Mortgage Arrangement" value={mortgageArrangement} />
-                      <CostRow label="Removals" value={removals} />
-                      <CostRow label="Other Costs" value={otherCosts} />
-                      <CostRow label="TOTAL CASH TO BUY" value={totalCashNeeded} highlight />
-                    </div>
-                  </Card>
-                  <Card title="Cash Available from Sale" accent="var(--green)">
-                    <div className="card-body">
-                      <CostRow label="Sale Price" value={salePrice} />
-                      <CostRow label="Estate Agent Fee" value={-agentFeeTotal} sub={`${agentFeePct}%${agentFeeVAT ? " + VAT" : ""}`} />
-                      <CostRow label="Seller's Solicitor" value={-sellerSolicitorFee} />
-                      <CostRow label="Mortgage Paydown" value={-existingMortgage} sub="Repaid on completion" />
-                      <CostRow label="Net Sale Proceeds" value={netSaleProceeds} highlight />
-                      <div style={{ marginTop: 6 }}>
-                        <CostRow label="Savings / Other Cash" value={savings} />
-                        <CostRow label="TOTAL CASH AVAILABLE" value={cashAvailable} highlight />
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-                <div className="info-box">
-                  <strong>SDLT (post April 2025):</strong> 0% up to £125k · 2% up to £250k · 5% up to £925k · 10% up to £1.5m · 12% above. Additional property +5%. All figures are estimates — consult a qualified solicitor and mortgage adviser.
-                </div>
-              </>
-            )}
-
-            {/* PURCHASE */}
-            {tab === "purchase" && (
-              <>
-                <Card title="Purchase Details" subtitle="Configure your new home purchase">
-                  <div className="card-body">
-                    <div style={{ marginBottom: 10 }}>
-                      <div className="slider-label" style={{ marginBottom: 6 }}>Buyer Type</div>
-                      <PillToggle options={[{ value: "standard", label: "Standard (Home Mover)" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional Property" }]} value={buyerType} onChange={setBuyerType} />
-                    </div>
-                    <SliderInput label="Offer / Purchase Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} />
-                    <SliderInput label="Deposit %" value={depositPct} onChange={setDepositPct} min={5} max={50} step={1} prefix="" suffix="%" />
-                  </div>
-                </Card>
-                <div className="two-col">
-                  <Card title="Deposit & Loan">
-                    <div className="card-body">
-                      <CostRow label="Offer Price" value={offerPrice} />
-                      <CostRow label="Deposit Amount" value={depositAmount} sub={`${depositPct}%`} />
-                      <CostRow label="Mortgage Required" value={mortgageLoan} highlight />
-                      <div style={{ marginTop: 10 }}>
-                        <div className="slider-label" style={{ marginBottom: 3, fontSize: 11 }}>Loan-to-Value</div>
-                        <div className="mortgage-bar"><div className="mortgage-bar-fill" style={{ width: `${ltv}%` }} /></div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--muted)" }}>
-                          <span>Equity {fmtPct(depositPct)}</span><span>LTV {fmtPct(ltv)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                  <Card title="Buying Costs">
-                    <div className="card-body">
-                      {[["Solicitor / Conveyancer Fee (£)", buyerSolicitorFee, setBuyerSolicitorFee],["Survey / Valuation Fee (£)", surveyFee, setSurveyFee],["Mortgage Arrangement Fee (£)", mortgageArrangement, setMortgageArrangement],["Removals (£)", removals, setRemovals],["Other Costs (£)", otherCosts, setOtherCosts]].map(([lbl, val, fn]) => (
-                        <div key={lbl} className="num-input-wrap"><label className="num-input-label">{lbl}</label><input className="num-input" type="number" value={val} onChange={e => fn(Number(e.target.value))} /></div>
-                      ))}
-                    </div>
-                  </Card>
-                </div>
-              </>
-            )}
-
-            {/* SALE */}
-            {tab === "sale" && (
-              <>
-                <Card title="Current Flat Sale" subtitle="Your proceeds from selling your current property">
-                  <div className="card-body">
-                    <SliderInput label="Expected Sale Price" value={salePrice} onChange={setSalePrice} min={100000} max={2000000} step={5000} />
-                    <SliderInput label="Existing Mortgage to Pay Off" value={existingMortgage} onChange={setExistingMortgage} min={0} max={Math.min(salePrice, 1500000)} step={5000} hint={`Equity in flat: ${fmt(saleEquity)} (${saleEquityPct.toFixed(1)}% of sale price)`} />
-                    <SliderInput label="Estate Agent Fee %" value={agentFeePct} onChange={setAgentFeePct} min={0.5} max={3.5} step={0.1} prefix="" suffix="%" hint="Typical London high street: 1.0–2.0%. Online agents: 0.5–0.9%" />
-                    <div className="toggle-row">
-                      <div><div className="toggle-label">Estate Agent Fee includes VAT (20%)</div><div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>All UK estate agent fees attract 20% VAT</div></div>
-                      <label className="toggle"><input type="checkbox" checked={agentFeeVAT} onChange={e => setAgentFeeVAT(e.target.checked)} /><div className="toggle-track" /></label>
-                    </div>
-                    <div style={{ marginTop: 12 }}>
-                      <div className="num-input-wrap"><label className="num-input-label">Seller's Solicitor / Conveyancer Fee (£)</label><input className="num-input" type="number" value={sellerSolicitorFee} onChange={e => setSellerSolicitorFee(Number(e.target.value))} /></div>
-                      <div className="num-input-wrap"><label className="num-input-label">Additional Savings / Cash Available (£)</label><input className="num-input" type="number" value={savings} onChange={e => setSavings(Number(e.target.value))} /></div>
-                    </div>
-                  </div>
-                </Card>
-                <Card title="Sale Proceeds Breakdown">
-                  <div className="card-body">
-                    <CostRow label="Gross Sale Price" value={salePrice} />
-                    <CostRow label="Estate Agent Fee (excl VAT)" value={-agentFeeBase} sub={`${agentFeePct}%`} />
-                    {agentFeeVAT && <CostRow label="VAT on Agent Fee (20%)" value={-(agentFeeTotal - agentFeeBase)} />}
-                    <CostRow label="Seller's Solicitor" value={-sellerSolicitorFee} />
-                    <CostRow label="Gross Proceeds (before mortgage)" value={grossSaleProceeds} highlight />
-                    <div style={{ marginTop: 6 }}>
-                      <CostRow label="Existing Mortgage Repayment" value={-existingMortgage} sub="Paid to lender on completion" />
-                      <CostRow label="Net Cash from Sale" value={netSaleProceeds} highlight />
-                    </div>
-                    <div style={{ marginTop: 6 }}>
-                      <CostRow label="Plus Savings" value={savings} />
-                      <CostRow label="Total Cash Available" value={cashAvailable} highlight />
-                    </div>
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Equity vs Mortgage in Flat</div>
-                      <div className="mortgage-bar" style={{ height: 10, borderRadius: 5 }}><div className="mortgage-bar-fill" style={{ width: `${Math.min(100, Math.max(0, saleEquityPct))}%` }} /></div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginTop: 4 }}>
-                        <span style={{ color: "var(--accent)" }}>Equity {fmt(saleEquity)} ({saleEquityPct.toFixed(1)}%)</span>
-                        <span style={{ color: "var(--muted)" }}>Mortgage {fmt(existingMortgage)} ({(100 - saleEquityPct).toFixed(1)}%)</span>
-                      </div>
-                    </div>
-                    {netSaleProceeds < 0 && <div className="info-box" style={{ marginTop: 10, borderColor: "rgba(224,123,106,.4)", background: "rgba(224,123,106,.07)" }}>⚠ Mortgage exceeds net sale proceeds — additional cash needed at completion.</div>}
-                  </div>
-                </Card>
-              </>
-            )}
-
-            {/* MORTGAGE */}
-            {tab === "mortgage" && (
-              <>
-                <Card title="Mortgage Calculator" subtitle="Repayment mortgage on capital + interest basis">
-                  <div className="card-body">
-                    <SliderInput label="Annual Interest Rate" value={mortgageRate} onChange={setMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" hint="Current UK average 5-year fixed rate: ~4.3–4.8%" />
-                    <SliderInput label="Mortgage Term" value={mortgageTerm} onChange={setMortgageTerm} min={5} max={35} step={1} prefix="" suffix=" years" />
-                  </div>
-                </Card>
-                <div className="two-col">
-                  <Card title="Monthly Repayment">
-                    <div className="card-body">
-                      <div style={{ textAlign: "center", padding: "14px 0" }}>
-                        <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>Monthly Payment</div>
-                        <div style={{ fontSize: 34, fontFamily: "'Playfair Display', serif", color: "var(--accent)", fontWeight: 700 }}>{fmt(mortgage.monthly)}</div>
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>per month for {mortgageTerm} years</div>
-                      </div>
-                      <CostRow label="Loan Amount" value={mortgageLoan} />
-                      <CostRow label="Total Repaid" value={mortgage.total} />
-                      <CostRow label="Total Interest" value={mortgage.interest} />
-                    </div>
-                  </Card>
-                  <Card title="Loan Composition">
-                    <div className="card-body">
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 5 }}>Principal vs Interest</div>
-                        <div className="mortgage-bar" style={{ height: 14, borderRadius: 5 }}><div className="mortgage-bar-fill" style={{ width: `${mortgage.total > 0 ? (mortgageLoan / mortgage.total) * 100 : 0}%` }} /></div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginTop: 4 }}>
-                          <span style={{ color: "var(--accent)" }}>Principal {mortgage.total > 0 ? ((mortgageLoan / mortgage.total) * 100).toFixed(0) : 0}%</span>
-                          <span style={{ color: "var(--accent2)" }}>Interest {mortgage.total > 0 ? ((mortgage.interest / mortgage.total) * 100).toFixed(0) : 0}%</span>
-                        </div>
-                      </div>
-                      <CostRow label="Principal" value={mortgageLoan} />
-                      <CostRow label="Total Interest" value={mortgage.interest} />
-                      <CostRow label="Total Cost" value={mortgage.total} highlight />
-                      <div className="info-box" style={{ marginTop: 10 }}>
-                        <strong>+0.5% rate</strong> → +{fmt(calcMortgage(mortgageLoan, mortgageRate + 0.5, mortgageTerm).monthly - mortgage.monthly)}/mo &nbsp;·&nbsp;
-                        <strong>−0.5% rate</strong> → saves {fmt(mortgage.monthly - calcMortgage(mortgageLoan, mortgageRate - 0.5, mortgageTerm).monthly)}/mo
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-              </>
-            )}
-
-            {/* STAMP DUTY */}
-            {tab === "stampdust" && (
-              <>
-                <Card title="Stamp Duty Land Tax (SDLT)" subtitle="England & Northern Ireland · Rates effective 1 April 2025 · Source: GOV.UK / HMRC">
-                  <div className="card-body">
-                    <div style={{ marginBottom: 12 }}>
-                      <div className="slider-label" style={{ marginBottom: 6 }}>Buyer Type</div>
-                      <PillToggle options={[{ value: "standard", label: "Standard (Home Mover)" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional Property (+5%)" }]} value={buyerType} onChange={setBuyerType} />
-                    </div>
-                    <SliderInput label="Property Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} />
-                  </div>
-                </Card>
-                <div className="two-col">
-                  <Card title="SDLT Band Breakdown" accent="var(--accent2)">
-                    <div className="card-body">
-                      {sdlt.bands.length === 0 && <div style={{ color: "var(--muted)", fontSize: 12 }}>No stamp duty payable.</div>}
-                      {sdlt.bands.map((b, i) => (
-                        <div key={i} className="sdlt-band">
-                          <span className="sdlt-band-label">{b.label}</span>
-                          <div className="sdlt-band-bar-wrap"><div className="sdlt-band-bar" style={{ width: `${sdlt.total > 0 ? Math.min(100, (b.tax / sdlt.total) * 100) : 0}%` }} /></div>
-                          <span className="sdlt-band-rate">{b.rate}%</span>
-                          <span className="sdlt-band-tax">{fmt(b.tax)}</span>
-                        </div>
-                      ))}
-                      <div style={{ padding: "11px 0 0", borderTop: "1px solid var(--border)", marginTop: 6, display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ fontWeight: 600, fontSize: 12 }}>Total SDLT</span>
-                        <span style={{ fontWeight: 700, fontSize: 16, color: "var(--accent)", fontFamily: "'Playfair Display', serif" }}>{fmt(sdlt.total)}</span>
-                      </div>
-                    </div>
-                  </Card>
-                  <Card title="Current SDLT Rate Table">
-                    <div className="card-body">
-                      <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8 }}>England & NI · Standard Residential · Post 1 April 2025</div>
-                      {[["£0 – £125,000","0%"],["£125,001 – £250,000","2%"],["£250,001 – £925,000","5%"],["£925,001 – £1,500,000","10%"],["Above £1,500,000","12%"]].map(([band, rate]) => (
-                        <div key={band} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 11 }}>
-                          <span style={{ color: "var(--muted)" }}>{band}</span>
-                          <span style={{ fontWeight: 600, color: "var(--accent2)" }}>{rate}</span>
-                        </div>
-                      ))}
-                      <div className="info-box" style={{ marginTop: 10 }}>
-                        <strong>First-Time Buyers:</strong> 0% up to £300k · 5% £300k–£500k · No relief above £500k<br />
-                        <strong>Additional Property:</strong> +5% surcharge on all bands<br />
-                        <strong>Due:</strong> Within 14 days of completion
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-              </>
-            )}
-
-            {/* SCENARIO */}
-            {tab === "scenario" && (
-              <>
-                <div className="scen-header">
-                  <div className="scen-header-text">
-                    <h3>Adjust the levers below</h3>
-                    <p>Each lever shows its direct impact on your cash position in real time</p>
-                  </div>
-                  <button className="scen-reset-btn" onClick={resetScenario}>↺ Reset to base</button>
-                </div>
-
-                <div className="scen-levers">
-                  {/* Offer Price */}
-                  {(() => { const d = scenOfferPrice - offerPrice; const cls = d < 0 ? "pos" : d > 0 ? "neg" : "neu"; const chip = d === 0 ? "Base" : (d > 0 ? "+" : "") + fmt(d); return (
-                    <div className="lever-card">
-                      <div className="lever-card-top">
-                        <div><div className="lever-card-label">Offer Price</div><div className="lever-card-value">{fmt(scenOfferPrice)}</div><div className="lever-card-sub">Deposit: {fmt(scenDepositAmt)} · SDLT: {fmt(scenSDLT.total)}</div></div>
-                        <span className={`lever-chip ${cls}`}>{chip}</span>
-                      </div>
-                      <SliderInput value={scenOfferPrice} onChange={setScenOfferPrice} min={Math.max(50000, offerPrice - 250000)} max={offerPrice + 300000} step={5000} />
-                      <div className="lever-insight">↑ higher offer = more deposit & SDLT needed · Base: {fmt(offerPrice)}</div>
-                    </div>
-                  ); })()}
-
-                  {/* Sale Price */}
-                  {(() => { const d = scenSalePrice - salePrice; const cls = d > 0 ? "pos" : d < 0 ? "neg" : "neu"; const chip = d === 0 ? "Base" : (d > 0 ? "+" : "") + fmt(d); return (
-                    <div className="lever-card">
-                      <div className="lever-card-top">
-                        <div><div className="lever-card-label">Sale Price (Flat)</div><div className="lever-card-value">{fmt(scenSalePrice)}</div><div className="lever-card-sub">Net proceeds: {fmt(scenNetSale)}</div></div>
-                        <span className={`lever-chip ${cls}`}>{chip}</span>
-                      </div>
-                      <SliderInput value={scenSalePrice} onChange={setScenSalePrice} min={Math.max(50000, salePrice - 200000)} max={salePrice + 200000} step={5000} />
-                      <div className="lever-insight">↑ higher sale = more cash after mortgage paydown · Base: {fmt(salePrice)}</div>
-                    </div>
-                  ); })()}
-
-                  {/* Deposit % */}
-                  {(() => { const d = scenDepositPct - depositPct; const cls = d > 0 ? "neg" : d < 0 ? "pos" : "neu"; const chip = d === 0 ? "Base" : (d > 0 ? "+" : "") + d + "%"; return (
-                    <div className="lever-card">
-                      <div className="lever-card-top">
-                        <div><div className="lever-card-label">Deposit %</div><div className="lever-card-value">{scenDepositPct}%</div><div className="lever-card-sub">{fmt(scenDepositAmt)} · LTV {fmtPct(100 - scenDepositPct)}</div></div>
-                        <span className={`lever-chip ${cls}`}>{chip}</span>
-                      </div>
-                      <SliderInput value={scenDepositPct} onChange={setScenDepositPct} min={5} max={50} step={1} prefix="" suffix="%" />
-                      <div className="lever-insight">↑ bigger deposit = lower mortgage but more upfront cash · Base: {depositPct}%</div>
-                    </div>
-                  ); })()}
-
-                  {/* Mortgage Rate */}
-                  {(() => { const d = +(scenMortgageRate - mortgageRate).toFixed(2); const cls = d > 0 ? "neg" : d < 0 ? "pos" : "neu"; const chip = d === 0 ? "Base" : (d > 0 ? "+" : "") + d.toFixed(2) + "%"; return (
-                    <div className="lever-card">
-                      <div className="lever-card-top">
-                        <div><div className="lever-card-label">Mortgage Rate</div><div className="lever-card-value">{scenMortgageRate}%</div><div className="lever-card-sub">{fmt(scenMortgage.monthly)}/mo · Total: {fmt(scenMortgage.total)}</div></div>
-                        <span className={`lever-chip ${cls}`}>{chip}</span>
-                      </div>
-                      <SliderInput value={scenMortgageRate} onChange={setScenMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" />
-                      <div className="lever-insight">↑ higher rate = larger monthly payment over {mortgageTerm} years · Base: {mortgageRate}%</div>
-                    </div>
-                  ); })()}
-                </div>
-
-                <div className="outcome-panel">
-                  <div className="outcome-panel-header">
-                    <div className="outcome-panel-title">What this means for you — end result</div>
-                  </div>
-                  <div className="outcome-boxes">
-                    <div className="outcome-box">
-                      <div className="outcome-box-label">Base Case</div>
-                      <div className={`outcome-big ${cashSurplusDeficit >= 0 ? "pos" : "neg"}`}>{cashSurplusDeficit >= 0 ? "+" : ""}{fmt(cashSurplusDeficit)}</div>
-                      <div className="outcome-box-sub">surplus / deficit</div>
-                      <div className="outcome-box-sub" style={{ marginTop: 4 }}>{fmt(mortgage.monthly)}/mo mortgage</div>
-                    </div>
-                    <div className="outcome-box scenario">
-                      <div className="outcome-box-label">Your Scenario</div>
-                      <div className={`outcome-big ${scenSurplus >= 0 ? "pos" : "neg"}`}>{scenSurplus >= 0 ? "+" : ""}{fmt(scenSurplus)}</div>
-                      <div className="outcome-box-sub">surplus / deficit</div>
-                      <div className="outcome-box-sub" style={{ marginTop: 4 }}>{fmt(scenMortgage.monthly)}/mo mortgage</div>
-                    </div>
-                    <div className="outcome-box">
-                      <div className="outcome-box-label">Change vs Base</div>
-                      <div className={`outcome-big ${scenDiff >= 0 ? "pos" : "neg"}`}>{scenDiff >= 0 ? "+" : ""}{fmt(scenDiff)}</div>
-                      <div className="outcome-box-sub">cash impact</div>
-                      <div className="outcome-box-sub" style={{ marginTop: 4, color: scenMortgage.monthly > mortgage.monthly ? "var(--red)" : scenMortgage.monthly < mortgage.monthly ? "var(--green)" : "var(--muted)" }}>
-                        {scenMortgage.monthly === mortgage.monthly ? "No monthly change" : (scenMortgage.monthly > mortgage.monthly ? "+" : "") + fmt(scenMortgage.monthly - mortgage.monthly) + "/mo"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="outcome-impact">
-                    {[
-                      { label: "Total Cash Needed", base: totalCashNeeded, scen: scenCashNeeded, lowerBetter: true },
-                      { label: "Total Cash Available", base: cashAvailable, scen: scenCashAvailable, lowerBetter: false },
-                      { label: "Deposit Required", base: depositAmount, scen: scenDepositAmt, lowerBetter: true },
-                      { label: "Stamp Duty (SDLT)", base: sdlt.total, scen: scenSDLT.total, lowerBetter: true },
-                      { label: "Monthly Mortgage Payment", base: mortgage.monthly, scen: scenMortgage.monthly, lowerBetter: true },
-                    ].map(({ label, base, scen, lowerBetter }) => {
-                      const d = scen - base;
-                      const isGood = lowerBetter ? d <= 0 : d >= 0;
-                      const cls = d === 0 ? "neu" : isGood ? "pos" : "neg";
-                      const chip = d === 0 ? "No change" : (d > 0 ? "+" : "") + fmt(d);
-                      return (
-                        <div key={label} className="impact-row">
-                          <span className="impact-label">{label}</span>
-                          <div className="impact-right">
-                            <span className="impact-base">{fmt(base)}</span>
-                            <span className="impact-arrow">→</span>
-                            <span className="impact-scen">{fmt(scen)}</span>
-                            <span className={`impact-chip ${cls}`}>{chip}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-
+              );
+            })}
           </div>
-        </div>
-      );
-    }
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
+          {/* Outcome panel */}
+          <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ padding: "11px 15px", borderBottom: `1px solid ${border}`, fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.5px" }}>What this means for you</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
+              {[
+                { label: "Base Case", val: cashSurplusDeficit, sub: `${fmt(mortgage.monthly)}/mo`, highlight: false },
+                { label: "Your Scenario", val: scenSurplus, sub: `${fmt(scenMortgage.monthly)}/mo`, highlight: true },
+                { label: "Change vs Base", val: scenDiff, sub: scenMortgage.monthly === mortgage.monthly ? "No monthly change" : `${scenMortgage.monthly > mortgage.monthly ? "+" : ""}${fmt(scenMortgage.monthly - mortgage.monthly)}/mo`, highlight: false },
+              ].map(({ label, val, sub, highlight }) => (
+                <div key={label} style={{ padding: "16px 14px", textAlign: "center", background: highlight ? (d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.05)") : "transparent", borderRight: `1px solid ${border}` }}>
+                  <div style={{ fontSize: 10, color: highlight ? "#c9a96e" : muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 7 }}>{label}</div>
+                  <div style={{ fontSize: 22, fontFamily: "'Georgia', serif", fontWeight: 700, color: val >= 0 ? green : red }}>{val >= 0 ? "+" : ""}{fmt(val)}</div>
+                  <div style={{ fontSize: 10, color: muted, marginTop: 4 }}>{sub}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: "10px 15px" }}>
+              {[
+                { label: "Total Cash Needed", base: totalCashNeeded, scen: scenCashNeeded, lb: true },
+                { label: "Total Cash Available", base: cashAvailable, scen: scenCashAvailable, lb: false },
+                { label: "Deposit Required", base: depositAmount, scen: scenDepositAmt, lb: true },
+                { label: "Stamp Duty", base: sdlt.total, scen: scenSDLT.total, lb: true },
+                { label: "Monthly Mortgage", base: mortgage.monthly, scen: scenMortgage.monthly, lb: true },
+              ].map(({ label, base, scen, lb }) => {
+                const diff = scen - base;
+                const good = lb ? diff <= 0 : diff >= 0;
+                const c = diff === 0 ? muted : good ? green : red;
+                return (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${border}` }}>
+                    <span style={{ fontSize: 12, color: muted }}>{label}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                      <span style={{ fontSize: 11, color: muted }}>{fmt(base)}</span>
+                      <span style={{ fontSize: 11, color: muted }}>→</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: text }}>{fmt(scen)}</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: `${c}22`, color: c }}>{diff === 0 ? "No change" : `${diff > 0 ? "+" : ""}${fmt(diff)}`}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>)}
+
+      </div>
+    </div>
+  );
+}
+
+
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(React.createElement(App));
   </script>
 </body>
 </html>
