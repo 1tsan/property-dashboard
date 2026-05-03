@@ -16,17 +16,17 @@
     input[type=number] { -moz-appearance: textfield; }
     input[type=number]::-webkit-outer-spin-button,
     input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    /* Offset content from the burger button */
+    body { padding-left: 0; }
   </style>
 </head>
 <body>
   <div id="root"></div>
-
-  <!-- React 18 -->
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <!-- Babel for JSX — loaded synchronously before our script -->
   <script src="https://unpkg.com/@babel/standalone@7.23.3/babel.min.js"></script>
-
+  <!-- Shared navigation — update nav.js and all pages update automatically -->
+  <script src="/nav.js"></script>
   <script type="text/babel" data-presets="react">
     const { useState, useMemo, useRef } = React;
 
@@ -78,7 +78,7 @@ function calcMortgage(principal, annualRate, years) {
 function Onboarding({ onComplete, theme }) {
   const d = theme === "light";
   const [vals, setVals] = useState({
-    offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", mortgageTerm: "",
+    offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", savings: "", mortgageTerm: "",
   });
   const [errors, setErrors] = useState({});
 
@@ -101,11 +101,11 @@ function Onboarding({ onComplete, theme }) {
     setErrors(errs);
     if (Object.keys(errs).length) return;
     const n = k => Number(vals[k].toString().replace(/,/g, "")) || 0;
-    onComplete({ offerPrice: n("offerPrice"), depositPct: n("depositPct"), salePrice: n("salePrice"), existingMortgage: n("existingMortgage"), mortgageTerm: n("mortgageTerm") });
+    onComplete({ offerPrice: n("offerPrice"), depositPct: n("depositPct"), salePrice: n("salePrice"), existingMortgage: n("existingMortgage"), savings: n("savings"), mortgageTerm: n("mortgageTerm") });
   };
 
   const steps = [
-    { n: "1", title: "Enter your basics", body: "Fill in the six fields — all are quick estimates, nothing needs to be exact." },
+    { n: "1", title: "Enter your basics", body: "Fill in the fields — estimates are fine. Mortgage rate is pre-filled from today's market." },
     { n: "2", title: "See your position instantly", body: "The Overview shows your cash surplus or deficit after all costs." },
     { n: "3", title: "Refine on any tab", body: "Adjust fees, stamp duty type, agent rates, solicitor costs — every number is editable." },
     { n: "4", title: "Run scenarios", body: "Use the Scenarios tab to test different offer prices, sale prices, and rates side by side." },
@@ -142,7 +142,7 @@ function Onboarding({ onComplete, theme }) {
             ))}
           </div>
           <div style={{ marginTop: 28, padding: "12px 16px", borderRadius: 8, background: d ? "rgba(201,169,110,0.08)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: d ? "#7a6030" : "#a07840", lineHeight: 1.6 }}>
-            <strong style={{ color: "#c9a96e" }}>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared. We've pre-filled the mortgage rate with today's best 5-year fixed rate (4.73% from Nationwide, May 2026).
+            <strong style={{ color: "#c9a96e" }}>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared. Mortgage rate is pre-filled at 4.35% — the best 5-year fixed available in May 2026 (source: HomeOwners Alliance / L&C). Adjust on the Mortgage tab.
           </div>
         </div>
 
@@ -150,7 +150,7 @@ function Onboarding({ onComplete, theme }) {
         <div style={{ width: 420, background: d ? "#fff" : "#181820", border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, borderRadius: 16, padding: "32px 28px", boxShadow: d ? "0 4px 24px rgba(0,0,0,0.07)" : "0 4px 32px rgba(0,0,0,0.4)" }}>
           <div style={{ fontSize: 16, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 4 }}>Your numbers</div>
           <div style={{ fontSize: 12, color: d ? "#888" : "#8a87a0", marginBottom: 24 }}>
-            Fill in what you know — estimates are fine. Existing mortgage is optional.
+            Estimates are fine. Existing mortgage and savings are optional. Mortgage rate is set automatically.
           </div>
 
           {fields.map(f => (
@@ -306,14 +306,15 @@ function App() {
   const [scenDepositPct, setScenDepositPct] = useState(20);
   const [scenMortgageRate, setScenMortgageRate] = useState(4.5);
 
-  // Live market rate: best 5yr fixed May 2026 (Nationwide, source: L&C/HomeOwners Alliance)
-  const MARKET_RATE = 4.73;
+  // Live market rate: best 5yr fixed May 2026 (source: HomeOwners Alliance / L&C, updated 2 May 2026)
+  const MARKET_RATE = 4.35;
 
   const handleOnboardingComplete = (vals) => {
     setOfferPrice(vals.offerPrice);
     setDepositPct(vals.depositPct);
     setSalePrice(vals.salePrice);
     setExistingMortgage(vals.existingMortgage);
+    if (vals.savings) setSavings(vals.savings);
     setMortgageRate(MARKET_RATE);
     setMortgageTerm(vals.mortgageTerm);
     setScenOfferPrice(vals.offerPrice);
@@ -625,8 +626,8 @@ function App() {
 
         {/* MORTGAGE */}
         {tab === "mortgage" && (<>
-          <Card title="Mortgage Calculator" subtitle="Rate pre-filled from today's best 5-yr fixed market rate" theme={theme}>
-            <SliderInput label="Interest Rate" value={mortgageRate} onChange={setMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" hint="Pre-filled: best 5-yr fixed May 2026 (4.73%, Nationwide). Adjust to match your quote." theme={theme} />
+          <Card title="Mortgage Calculator" subtitle="Rate pre-filled: 4.35% best 5-yr fixed (HomeOwners Alliance / L&C, May 2026)" theme={theme}>
+            <SliderInput label="Interest Rate" value={mortgageRate} onChange={setMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" hint="Pre-filled: best 5-yr fixed May 2026 (4.35%). Adjust to match your own quote." theme={theme} />
             <SliderInput label="Term" value={mortgageTerm} onChange={setMortgageTerm} min={5} max={35} step={1} prefix="" suffix=" years" theme={theme} />
           </Card>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
