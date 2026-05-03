@@ -78,7 +78,7 @@ function calcMortgage(principal, annualRate, years) {
 function Onboarding({ onComplete, theme }) {
   const d = theme === "light";
   const [vals, setVals] = useState({
-    offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", savings: "", mortgageTerm: "",
+    offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", savings: "",
   });
   const [errors, setErrors] = useState({});
 
@@ -93,7 +93,7 @@ function Onboarding({ onComplete, theme }) {
     { key: "mortgageTerm",     label: "Mortgage term",                       prefix: "",  suffix: " years", placeholder: "e.g. 25", hint: "Number of years for the new mortgage." },
   ];
 
-  const required = ["offerPrice", "depositPct", "salePrice", "mortgageTerm"];
+  const required = ["offerPrice", "depositPct", "salePrice"];
 
   const handleSubmit = () => {
     const errs = {};
@@ -101,7 +101,7 @@ function Onboarding({ onComplete, theme }) {
     setErrors(errs);
     if (Object.keys(errs).length) return;
     const n = k => Number(vals[k].toString().replace(/,/g, "")) || 0;
-    onComplete({ offerPrice: n("offerPrice"), depositPct: n("depositPct"), salePrice: n("salePrice"), existingMortgage: n("existingMortgage"), savings: n("savings"), mortgageTerm: n("mortgageTerm") });
+    onComplete({ offerPrice: n("offerPrice"), depositPct: n("depositPct"), salePrice: n("salePrice"), existingMortgage: n("existingMortgage"), savings: n("savings") });
   };
 
   const steps = [
@@ -142,7 +142,7 @@ function Onboarding({ onComplete, theme }) {
             ))}
           </div>
           <div style={{ marginTop: 28, padding: "12px 16px", borderRadius: 8, background: d ? "rgba(201,169,110,0.08)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: d ? "#7a6030" : "#a07840", lineHeight: 1.6 }}>
-            <strong style={{ color: "#c9a96e" }}>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared. Mortgage rate is pre-filled at 4.35% — the best 5-year fixed available in May 2026 (source: HomeOwners Alliance / L&C). Adjust on the Mortgage tab.
+            <strong style={{ color: "#c9a96e" }}>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared.
           </div>
         </div>
 
