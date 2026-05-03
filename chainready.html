@@ -85,12 +85,11 @@ function Onboarding({ onComplete, theme }) {
   const set = (k, v) => setVals(p => ({ ...p, [k]: v }));
 
   const fields = [
-    { key: "offerPrice",       label: "Offer price on new home",            prefix: "£", placeholder: "e.g. 750000", hint: "The price you plan to offer or have offered." },
-    { key: "depositPct",       label: "Deposit %",                          prefix: "",  suffix: "%", placeholder: "e.g. 20", hint: "Percentage of the purchase price as deposit." },
+    { key: "offerPrice",       label: "Offer price on new home",               prefix: "£", placeholder: "e.g. 750000", hint: "The price you plan to offer or have offered." },
+    { key: "depositPct",       label: "Deposit %",                             prefix: "",  suffix: "%", placeholder: "e.g. 20", hint: "Percentage of the purchase price as deposit." },
     { key: "salePrice",        label: "Expected sale price of current property", prefix: "£", placeholder: "e.g. 420000", hint: "What you expect to sell your property for." },
-    { key: "existingMortgage", label: "Mortgage outstanding on property",        prefix: "£", placeholder: "e.g. 150000", hint: "Balance remaining on your current mortgage." },
-    { key: "mortgageRate",     label: "Expected mortgage interest rate",     prefix: "",  suffix: "%", placeholder: "e.g. 4.5", hint: "The rate on your new mortgage (current avg ~4.3–4.8%)." },
-    { key: "mortgageTerm",     label: "Mortgage term",                       prefix: "",  suffix: " years", placeholder: "e.g. 25", hint: "Number of years for the new mortgage." },
+    { key: "existingMortgage", label: "Mortgage outstanding on property",       prefix: "£", placeholder: "e.g. 150000", hint: "Balance remaining on your current mortgage." },
+    { key: "savings",          label: "Additional savings you are bringing in", prefix: "£", placeholder: "e.g. 50000",  hint: "Cash savings on top of your sale proceeds." },
   ];
 
   const required = ["offerPrice", "depositPct", "salePrice"];
