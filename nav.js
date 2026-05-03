@@ -15,7 +15,7 @@
   const css = `
     #fn-nav-overlay{position:fixed;inset:0;background:rgba(8,7,15,0.7);z-index:998;opacity:0;pointer-events:none;transition:opacity 0.3s;backdrop-filter:blur(4px);}
     #fn-nav-overlay.open{opacity:1;pointer-events:all;}
-    #fn-nav-drawer{position:fixed;top:0;left:0;bottom:0;width:260px;background:#111019;z-index:999;transform:translateX(-100%);transition:transform 0.32s cubic-bezier(0.22,1,0.36,1);border-right:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;}
+    #fn-nav-drawer{position:fixed;top:0;left:0;bottom:0;width:260px;background:#111019;z-index:999;transform:translateX(-100%);transition:transform 0.32s cubic-bezier(0.22,1,0.36,1);border-right:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;visibility:hidden;}
     #fn-nav-drawer.open{transform:translateX(0);}
     #fn-nav-header{padding:18px 20px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;}
     #fn-nav-logo{font-family:'Georgia',serif;font-size:16px;letter-spacing:5px;text-transform:uppercase;color:#f0ede8;text-decoration:none;}
@@ -62,6 +62,7 @@
   burger.innerHTML = '<span></span><span></span><span></span>';
 
   function open() {
+    drawer.style.visibility = 'visible';
     overlay.classList.add('open');
     drawer.classList.add('open');
     burger.classList.add('open');
@@ -72,6 +73,7 @@
     drawer.classList.remove('open');
     burger.classList.remove('open');
     document.body.style.overflow = '';
+    setTimeout(() => { if (!drawer.classList.contains('open')) drawer.style.visibility = 'hidden'; }, 320);
   }
 
   burger.addEventListener('click', () => drawer.classList.contains('open') ? close() : open());
