@@ -16,8 +16,7 @@
     input[type=number] { -moz-appearance: textfield; }
     input[type=number]::-webkit-outer-spin-button,
     input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
-    /* Offset content from the burger button */
-    body { padding-left: 0; }
+    input:focus, button:focus { outline: none; }
   </style>
 </head>
 <body>
@@ -26,18 +25,26 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.3/babel.min.js"></script>
   <script type="text/babel" data-presets="react">
-    const { useState, useMemo, useRef } = React;
+    const { useState, useMemo } = React;
 
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+// Best 5yr fixed, May 2026 (source: HomeOwners Alliance / L&C). Update periodically.
+const MARKET_RATE = 4.35;
+const STRESS_DELTA = 3; // lender stress test margin
+const LTI_CAP = 4.5;    // typical loan-to-income ceiling
 
-// ─── SDLT ─────────────────────────────────────────────────────────────────────
+// ─── CALCULATIONS ─────────────────────────────────────────────────────────────
 function calcSDLT(price, buyerType) {
   if (price <= 0) return { total: 0, bands: [] };
   let bands = [], type = buyerType;
   if (type === "firstTime") {
     if (price > 500000) { type = "standard"; }
     else {
-      const b1 = Math.min(price, 300000), b2 = Math.max(0, Math.min(price, 500000) - 300000);
-      return { total: b2 * 0.05, bands: [{ label: "£0 – £300,000", rate: 0, tax: 0 }, { label: "£300,001 – £500,000", rate: 5, tax: b2 * 0.05 }] };
+      const b2 = Math.max(0, Math.min(price, 500000) - 300000);
+      return { total: b2 * 0.05, bands: [
+        { label: "£0 – £300,000", rate: 0, tax: 0 },
+        ...(b2 > 0 ? [{ label: "£300,001 – £500,000", rate: 5, tax: b2 * 0.05 }] : [])
+      ]};
     }
   }
   if (type === "standard") {
@@ -49,7 +56,7 @@ function calcSDLT(price, buyerType) {
   }
   if (type === "additional") {
     const T = [{ limit: 125000, r: 5 },{ limit: 250000, r: 7 },{ limit: 925000, r: 10 },{ limit: 1500000, r: 15 },{ limit: Infinity, r: 17 }];
-    const L = ["£0 – £125,000 (5%)","£125,001 – £250,000 (7%)","£250,001 – £925,000 (10%)","£925,001 – £1,500,000 (15%)","Above £1,500,000 (17%)"];
+    const L = ["£0 – £125,000","£125,001 – £250,000","£250,001 – £925,000","£925,001 – £1,500,000","Above £1,500,000"];
     let prev = 0;
     T.forEach(({ limit, r }, i) => { if (price > prev) { const t = Math.min(price, limit) - prev; if (t > 0) bands.push({ label: L[i], rate: r, tax: t * r / 100 }); prev = limit; } });
     return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
@@ -57,148 +64,68 @@ function calcSDLT(price, buyerType) {
   return { total: 0, bands: [] };
 }
 
+function calcMortgage(principal, annualRate, years) {
+  if (!principal || principal <= 0 || !years) return { monthly: 0, total: 0, interest: 0 };
+  const r = annualRate / 100 / 12, n = years * 12;
+  if (r === 0) return { monthly: principal / n, total: principal, interest: 0 };
+  const monthly = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  return { monthly, total: monthly * n, interest: monthly * n - principal };
+}
+
 function fmt(n) {
   if (n === undefined || n === null || isNaN(n)) return "£0";
   const abs = Math.abs(Math.round(n));
   return (n < 0 ? "-£" : "£") + abs.toLocaleString("en-GB");
 }
-function fmtPct(n) { return n.toFixed(2) + "%"; }
-function calcMortgage(principal, annualRate, years) {
-  if (!principal || !annualRate || !years) return { monthly: 0, total: 0, interest: 0 };
-  const r = annualRate / 100 / 12, n = years * 12;
-  if (r === 0) return { monthly: principal / n, total: principal, interest: 0 };
-  const monthly = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-  const total = monthly * n;
-  return { monthly, total, interest: total - principal };
-}
+function fmtPct(n) { return (Math.round(n * 100) / 100) + "%"; }
 
-// ─── ONBOARDING ───────────────────────────────────────────────────────────────
-function Onboarding({ onComplete, theme }) {
+// ─── JOURNEYS ─────────────────────────────────────────────────────────────────
+const JOURNEYS = {
+  ftb: {
+    label: "My first home",
+    desc: "Buying for the first time — no property to sell, first-time buyer stamp duty relief.",
+    badge: "First-Time Buyer",
+    buyerType: "firstTime",
+    hasSale: false,
+  },
+  mover: {
+    label: "Moving home",
+    desc: "Selling my current property and buying the next one — the classic chain.",
+    badge: "Home Mover",
+    buyerType: "standard",
+    hasSale: true,
+  },
+  additional: {
+    label: "An additional property",
+    desc: "Buying while keeping my current property — second home or buy-to-let. +5% stamp duty applies.",
+    badge: "Additional Property",
+    buyerType: "additional",
+    hasSale: false,
+  },
+};
+
+// ─── SHARED UI ────────────────────────────────────────────────────────────────
+function MoneyInput({ value, onChange, placeholder, theme, error, suffix }) {
   const d = theme === "light";
-  const [vals, setVals] = useState({
-    offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", savings: "",
-  });
-  const [errors, setErrors] = useState({});
-
-  const set = (k, v) => setVals(p => ({ ...p, [k]: v }));
-
-  const fields = [
-    { key: "offerPrice",       label: "Offer price on new home",               prefix: "£", placeholder: "e.g. 750000", hint: "The price you plan to offer or have offered." },
-    { key: "depositPct",       label: "Deposit %",                             prefix: "",  suffix: "%", placeholder: "e.g. 20", hint: "Percentage of the purchase price as deposit." },
-    { key: "salePrice",        label: "Expected sale price of current property", prefix: "£", placeholder: "e.g. 420000", hint: "What you expect to sell your property for." },
-    { key: "existingMortgage", label: "Mortgage outstanding on property",       prefix: "£", placeholder: "e.g. 150000", hint: "Balance remaining on your current mortgage." },
-    { key: "savings",          label: "Additional savings you are bringing in", prefix: "£", placeholder: "e.g. 50000",  hint: "Cash savings on top of your sale proceeds." },
-  ];
-
-  const required = ["offerPrice", "depositPct", "salePrice"];
-
-  const handleSubmit = () => {
-    const errs = {};
-    required.forEach(k => { if (!vals[k] || isNaN(Number(vals[k].toString().replace(/,/g, "")))) errs[k] = "Required"; });
-    setErrors(errs);
-    if (Object.keys(errs).length) return;
-    const n = k => Number(vals[k].toString().replace(/,/g, "")) || 0;
-    onComplete({ offerPrice: n("offerPrice"), depositPct: n("depositPct"), salePrice: n("salePrice"), existingMortgage: n("existingMortgage"), savings: n("savings") });
-  };
-
-  const steps = [
-    { n: "1", title: "Enter your basics", body: "Fill in the fields — estimates are fine. Mortgage rate is pre-filled from today's market." },
-    { n: "2", title: "See your position instantly", body: "The Overview shows your cash surplus or deficit after all costs." },
-    { n: "3", title: "Refine on any tab", body: "Adjust fees, stamp duty type, agent rates, solicitor costs — every number is editable." },
-    { n: "4", title: "Run scenarios", body: "Use the Scenarios tab to test different offer prices, sale prices, and rates side by side." },
-  ];
-
+  const display = value === "" || value === 0 ? "" : Number(value).toLocaleString("en-GB");
   return (
-    <div style={{ minHeight: "100vh", background: d ? "#f5f4f0" : "#0f0f13", display: "flex", flexDirection: "column" }}>
-      {/* Top bar */}
-      <div style={{ padding: "16px 24px", borderBottom: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: d ? "#fff" : "#181820" }}>
-        <a href="https://fasanya.co.uk" style={{ fontFamily: "'Georgia', serif", fontSize: 15, letterSpacing: 4, textTransform: "uppercase", color: d ? "#1a1a1a" : "#f0ede8", textDecoration: "none", opacity: 0.7 }}>← Fasanya</a>
-        <span style={{ fontFamily: "'Georgia', serif", fontSize: 13, letterSpacing: 2, color: d ? "#c9a96e" : "#c9a96e", textTransform: "uppercase" }}>ChainReady</span>
-        <div style={{ width: 80 }} />
-      </div>
-
-      <div style={{ flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px 60px", gap: 32, flexWrap: "wrap" }}>
-
-        {/* How-to guide */}
-        <div style={{ width: 300, flexShrink: 0 }}>
-          <div style={{ fontFamily: "'Georgia', serif", fontSize: 22, fontWeight: 400, color: d ? "#1a1a1a" : "#f0ede8", lineHeight: 1.3, marginBottom: 6 }}>
-            Plan your move<br /><span style={{ color: "#c9a96e", fontStyle: "italic" }}>with clarity.</span>
-          </div>
-          <p style={{ fontSize: 13, color: d ? "#666" : "#8a87a0", lineHeight: 1.7, marginBottom: 28 }}>
-            ChainReady calculates your full financial position across both the purchase and sale — so you know exactly where you stand before you negotiate.
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {steps.map(s => (
-              <div key={s.n} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(201,169,110,0.15)", border: "1px solid rgba(201,169,110,0.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#c9a96e" }}>{s.n}</div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 2 }}>{s.title}</div>
-                  <div style={{ fontSize: 12, color: d ? "#666" : "#8a87a0", lineHeight: 1.6 }}>{s.body}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 28, padding: "12px 16px", borderRadius: 8, background: d ? "rgba(201,169,110,0.08)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: d ? "#7a6030" : "#a07840", lineHeight: 1.6 }}>
-            <strong style={{ color: "#c9a96e" }}>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared.
-          </div>
-        </div>
-
-        {/* Form */}
-        <div style={{ width: 420, background: d ? "#fff" : "#181820", border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, borderRadius: 16, padding: "32px 28px", boxShadow: d ? "0 4px 24px rgba(0,0,0,0.07)" : "0 4px 32px rgba(0,0,0,0.4)" }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 4 }}>Your numbers</div>
-          <div style={{ fontSize: 12, color: d ? "#888" : "#8a87a0", marginBottom: 24 }}>
-            Estimates are fine. Existing mortgage and savings are optional. Mortgage rate is set automatically.
-          </div>
-
-          {fields.map(f => (
-            <div key={f.key} style={{ marginBottom: 16 }}>
-              <label style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 500, color: errors[f.key] ? "#e07b6a" : d ? "#555" : "#8a87a0", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                <span>{f.label}{!required.includes(f.key) && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 4, color: d ? "#999" : "#666" }}>(optional)</span>}</span>
-                {errors[f.key] && <span style={{ color: "#e07b6a", fontSize: 10 }}>Required</span>}
-              </label>
-              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                {f.prefix && <span style={{ position: "absolute", left: 12, fontSize: 14, color: d ? "#888" : "#6a6880", pointerEvents: "none" }}>{f.prefix}</span>}
-                <input
-                  type="number"
-                  placeholder={f.placeholder}
-                  value={vals[f.key]}
-                  onChange={e => { set(f.key, e.target.value); if (errors[f.key]) setErrors(p => ({ ...p, [f.key]: null })); }}
-                  style={{
-                    width: "100%", padding: f.prefix ? "10px 12px 10px 26px" : "10px 12px",
-                    paddingRight: f.suffix ? 52 : 12,
-                    background: d ? (errors[f.key] ? "rgba(224,123,106,0.06)" : "#f8f7f5") : (errors[f.key] ? "rgba(224,123,106,0.08)" : "#1e1e28"),
-                    border: `1px solid ${errors[f.key] ? "#e07b6a" : d ? "#ddd" : "#2a2a38"}`,
-                    borderRadius: 8, fontSize: 14, color: d ? "#1a1a1a" : "#f0ede8",
-                    fontFamily: "inherit", outline: "none",
-                  }}
-                />
-                {f.suffix && <span style={{ position: "absolute", right: 12, fontSize: 12, color: d ? "#888" : "#6a6880", pointerEvents: "none" }}>{f.suffix}</span>}
-              </div>
-              {f.hint && <div style={{ fontSize: 11, color: d ? "#aaa" : "#555", marginTop: 4 }}>{f.hint}</div>}
-            </div>
-          ))}
-
-          <button
-            onClick={handleSubmit}
-            style={{
-              width: "100%", padding: "13px", marginTop: 8,
-              background: "#c9a96e", color: "#0f0f13",
-              border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600,
-              cursor: "pointer", fontFamily: "inherit", letterSpacing: 0.3,
-              transition: "opacity 0.2s",
-            }}
-            onMouseOver={e => e.target.style.opacity = 0.88}
-            onMouseOut={e => e.target.style.opacity = 1}
-          >
-            Show my position →
-          </button>
-        </div>
-      </div>
+    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+      {!suffix && <span style={{ position: "absolute", left: 12, fontSize: 14, color: d ? "#888" : "#6a6880", pointerEvents: "none" }}>£</span>}
+      <input
+        type="text" inputMode="numeric" placeholder={placeholder} value={display}
+        onChange={e => { const raw = e.target.value.replace(/[^0-9]/g, ""); onChange(raw === "" ? "" : Number(raw)); }}
+        style={{
+          width: "100%", padding: suffix ? "11px 44px 11px 13px" : "11px 13px 11px 27px",
+          background: d ? (error ? "rgba(224,123,106,0.06)" : "#f8f7f5") : (error ? "rgba(224,123,106,0.08)" : "#1e1e28"),
+          border: `1px solid ${error ? "#e07b6a" : d ? "#ddd" : "#2a2a38"}`,
+          borderRadius: 9, fontSize: 14, color: d ? "#1a1a1a" : "#f0ede8", fontFamily: "inherit",
+        }}
+      />
+      {suffix && <span style={{ position: "absolute", right: 13, fontSize: 12, color: d ? "#888" : "#6a6880", pointerEvents: "none" }}>{suffix}</span>}
     </div>
   );
 }
 
-// ─── SMALL COMPONENTS ─────────────────────────────────────────────────────────
 function SliderInput({ label, value, onChange, min, max, step = 1000, prefix = "£", suffix = "", hint, theme }) {
   const d = theme === "light";
   const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
@@ -210,7 +137,7 @@ function SliderInput({ label, value, onChange, min, max, step = 1000, prefix = "
       </div>}
       {hint && <div style={{ fontSize: 11, color: d ? "#aaa" : "#6a6880", marginBottom: 4 }}>{hint}</div>}
       <div style={{ position: "relative", height: 5, background: d ? "#e0ddd8" : "#2a2a38", borderRadius: 3, margin: "6px 0 3px" }}>
-        <div style={{ position: "absolute", height: "100%", width: `${pct}%`, background: "#c9a96e", borderRadius: 3, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", height: "100%", width: pct + "%", background: "#c9a96e", borderRadius: 3, pointerEvents: "none" }} />
         <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))}
           style={{ position: "absolute", top: "50%", left: 0, width: "100%", height: 5, background: "transparent", transform: "translateY(-50%)", cursor: "pointer", WebkitAppearance: "none", appearance: "none" }} />
       </div>
@@ -225,10 +152,10 @@ function SliderInput({ label, value, onChange, min, max, step = 1000, prefix = "
 function PillToggle({ options, value, onChange, theme }) {
   const d = theme === "light";
   return (
-    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14 }}>
+    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
       {options.map(o => (
         <button key={o.value} onClick={() => onChange(o.value)} style={{
-          padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+          padding: "4px 11px", borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
           border: value === o.value ? "1px solid #c9a96e" : `1px solid ${d ? "#ddd" : "#2a2a38"}`,
           background: value === o.value ? "#c9a96e" : d ? "#f0ede8" : "#1e1e28",
           color: value === o.value ? "#0f0f13" : d ? "#666" : "#8a87a0",
@@ -271,100 +198,285 @@ function CostRow({ label, value, sub, highlight, theme }) {
   );
 }
 
-// ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
+// ─── HEADER ───────────────────────────────────────────────────────────────────
+function Header({ theme, setTheme, onExport, showExport, journey, onChangeJourney }) {
+  const d = theme === "light";
+  const text = d ? "#1a1a1a" : "#f0ede8";
+  const muted = d ? "#888" : "#8a87a0";
+  const border = d ? "#e0ddd8" : "#2a2a38";
+  return (
+    <div style={{ background: d ? "#fff" : "#181820", borderBottom: `1px solid ${border}`, padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <a href="https://fasanya.co.uk" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>← fasanya.co.uk</a>
+        <span style={{ color: border }}>|</span>
+        <span style={{ fontFamily: "'Georgia', serif", fontSize: 15, color: text }}>ChainReady</span>
+        {journey && (
+          <button onClick={onChangeJourney} style={{ fontSize: 9, color: "#c9a96e", border: "1px solid #c9a96e", padding: "1px 8px", borderRadius: 20, letterSpacing: "0.5px", textTransform: "uppercase", background: "none", cursor: "pointer", fontFamily: "inherit" }}>
+            {JOURNEYS[journey].badge} · change
+          </button>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {showExport && (
+          <button onClick={onExport} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: muted, display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            PDF
+          </button>
+        )}
+        <button onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} style={{ background: d ? "#f0ede8" : "#2a2a38", border: `1px solid ${border}`, borderRadius: 20, padding: "4px 12px", cursor: "pointer", fontSize: 11, color: text, fontFamily: "inherit" }}>
+          {d ? "Dark" : "Light"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── STAGE 1: JOURNEY PICKER ──────────────────────────────────────────────────
+function JourneyPicker({ onPick, theme }) {
+  const d = theme === "light";
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 20px 64px" }}>
+      <div style={{ fontSize: 10, letterSpacing: 4, textTransform: "uppercase", color: "#c9a96e", marginBottom: 14 }}>Step 1 of 2</div>
+      <h1 style={{ fontFamily: "'Georgia', serif", fontSize: "clamp(26px, 4vw, 38px)", fontWeight: 400, color: d ? "#1a1a1a" : "#f0ede8", textAlign: "center", lineHeight: 1.25, marginBottom: 8 }}>
+        What does your move<br /><em style={{ color: "#c9a96e" }}>look like?</em>
+      </h1>
+      <p style={{ fontSize: 13, color: d ? "#777" : "#8a87a0", marginBottom: 36, textAlign: "center", maxWidth: 380, lineHeight: 1.7 }}>
+        ChainReady adapts everything — questions, stamp duty, and the cash maths — to your situation.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 480 }}>
+        {Object.entries(JOURNEYS).map(([key, j]) => (
+          <button key={key} onClick={() => onPick(key)} style={{
+            textAlign: "left", padding: "18px 22px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit",
+            background: d ? "#fff" : "#181820",
+            border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`,
+            transition: "border-color 0.2s, transform 0.15s",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+          }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = "#c9a96e"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseOut={e => { e.currentTarget.style.borderColor = d ? "#e0ddd8" : "#2a2a38"; e.currentTarget.style.transform = "none"; }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 500, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 4 }}>{j.label}</div>
+              <div style={{ fontSize: 12, color: d ? "#888" : "#8a87a0", lineHeight: 1.55 }}>{j.desc}</div>
+            </div>
+            <span style={{ color: "#c9a96e", fontSize: 18, flexShrink: 0 }}>→</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── STAGE 2: DETAILS FORM ────────────────────────────────────────────────────
+function DetailsForm({ journey, values, setValues, onBack, onComplete, theme }) {
+  const d = theme === "light";
+  const j = JOURNEYS[journey];
+  const [errors, setErrors] = useState({});
+
+  const fieldDefs = {
+    offerPrice:       { label: "Offer price on the new property", hint: "The price you plan to offer or have offered.", required: true },
+    depositPct:       { label: "Deposit", hint: "Percentage of the purchase price you'll put down.", required: true, suffix: "%" },
+    salePrice:        { label: "Expected sale price of your current property", hint: "Estimates are fine — you can refine later.", required: true },
+    existingMortgage: { label: "Mortgage outstanding on your current property", hint: "Balance left to repay. Leave blank if none.", required: false },
+    savings:          { label: j.hasSale ? "Additional savings you're bringing in" : "Savings available for this purchase", hint: j.hasSale ? "Cash on top of your sale proceeds." : "Your total cash available for deposit and costs.", required: !j.hasSale },
+  };
+
+  const order = j.hasSale
+    ? ["offerPrice", "depositPct", "salePrice", "existingMortgage", "savings"]
+    : ["offerPrice", "depositPct", "savings"];
+
+  const steps = j.hasSale ? [
+    { n: "1", t: "Enter your basics", b: "Quick estimates are fine — everything stays editable." },
+    { n: "2", t: "See your position", b: "Your cash surplus or shortfall after every cost, instantly." },
+    { n: "3", t: "Refine and stress-test", b: "Adjust fees, rates and prices. Run scenarios before you commit." },
+  ] : [
+    { n: "1", t: "Enter your basics", b: "Three numbers. Quick estimates are fine." },
+    { n: "2", t: "See your position", b: "Whether your savings cover the deposit and every buying cost." },
+    { n: "3", t: "Refine and stress-test", b: "Adjust costs and rates. Run scenarios before you offer." },
+  ];
+
+  const handleSubmit = () => {
+    const errs = {};
+    order.forEach(k => {
+      if (fieldDefs[k].required && (!values[k] || Number(values[k]) <= 0)) errs[k] = true;
+    });
+    setErrors(errs);
+    if (Object.keys(errs).length === 0) onComplete();
+  };
+
+  return (
+    <div style={{ flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px 60px", gap: 36, flexWrap: "wrap" }}>
+      {/* Guide */}
+      <div style={{ width: 290, flexShrink: 0 }}>
+        <div style={{ fontSize: 10, letterSpacing: 4, textTransform: "uppercase", color: "#c9a96e", marginBottom: 12 }}>Step 2 of 2 · {j.badge}</div>
+        <div style={{ fontFamily: "'Georgia', serif", fontSize: 22, color: d ? "#1a1a1a" : "#f0ede8", lineHeight: 1.3, marginBottom: 6 }}>
+          Plan your move<br /><em style={{ color: "#c9a96e" }}>with clarity.</em>
+        </div>
+        <p style={{ fontSize: 13, color: d ? "#666" : "#8a87a0", lineHeight: 1.7, marginBottom: 26 }}>
+          {j.hasSale
+            ? "ChainReady calculates your full position across both the purchase and the sale — so you know exactly where you stand before you negotiate."
+            : "ChainReady calculates your full position — deposit, stamp duty, fees and mortgage — so you know exactly where you stand before you offer."}
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
+          {steps.map(s => (
+            <div key={s.n} style={{ display: "flex", gap: 13, alignItems: "flex-start" }}>
+              <div style={{ width: 26, height: 26, borderRadius: "50%", background: "rgba(201,169,110,0.13)", border: "1px solid rgba(201,169,110,0.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 11, fontWeight: 600, color: "#c9a96e" }}>{s.n}</div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 2 }}>{s.t}</div>
+                <div style={{ fontSize: 12, color: d ? "#666" : "#8a87a0", lineHeight: 1.6 }}>{s.b}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 26, padding: "11px 15px", borderRadius: 8, background: "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: d ? "#7a6030" : "#a08850", lineHeight: 1.6 }}>
+          <strong style={{ color: "#c9a96e" }}>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared.
+        </div>
+      </div>
+
+      {/* Form */}
+      <div style={{ width: 420, maxWidth: "100%", background: d ? "#fff" : "#181820", border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, borderRadius: 16, padding: "30px 28px", boxShadow: d ? "0 4px 24px rgba(0,0,0,0.07)" : "0 4px 32px rgba(0,0,0,0.4)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8" }}>Your numbers</div>
+          <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 11, color: d ? "#999" : "#6a6880", cursor: "pointer", fontFamily: "inherit" }}>← Back</button>
+        </div>
+        <div style={{ fontSize: 12, color: d ? "#888" : "#8a87a0", marginBottom: 22 }}>Estimates are fine — everything stays editable inside the tool.</div>
+
+        {order.map(k => {
+          const f = fieldDefs[k];
+          return (
+            <div key={k} style={{ marginBottom: 15 }}>
+              <label style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 500, color: errors[k] ? "#e07b6a" : d ? "#555" : "#8a87a0", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                <span>{f.label}{!f.required && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 4, color: d ? "#999" : "#666" }}>(optional)</span>}</span>
+                {errors[k] && <span style={{ fontSize: 10 }}>Required</span>}
+              </label>
+              <MoneyInput
+                value={values[k]}
+                onChange={v => { setValues(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: false })); }}
+                placeholder={f.suffix === "%" ? "e.g. 15" : k === "offerPrice" ? "e.g. 450,000" : k === "salePrice" ? "e.g. 320,000" : "e.g. 50,000"}
+                theme={theme} error={errors[k]} suffix={f.suffix}
+              />
+              <div style={{ fontSize: 11, color: d ? "#aaa" : "#555", marginTop: 4 }}>{f.hint}</div>
+            </div>
+          );
+        })}
+
+        <button onClick={handleSubmit}
+          style={{ width: "100%", padding: 13, marginTop: 6, background: "#c9a96e", color: "#0f0f13", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+          onMouseOver={e => e.target.style.opacity = 0.88} onMouseOut={e => e.target.style.opacity = 1}>
+          Show my position →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function App() {
-  const [ready, setReady] = useState(false);
+  const [stage, setStage] = useState("journey"); // journey | details | dashboard
+  const [journey, setJourney] = useState(null);
   const [theme, setTheme] = useState("dark");
   const d = theme === "light";
 
-  // Inputs with defaults (set from onboarding)
-  const [offerPrice, setOfferPrice] = useState(750000);
-  const [depositPct, setDepositPct] = useState(20);
+  // Onboarding values (preserved so Back / Edit keeps everything)
+  const [ob, setOb] = useState({ offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", savings: "" });
+
+  // Dashboard state
+  const [offerPrice, setOfferPrice] = useState(450000);
+  const [depositPct, setDepositPct] = useState(15);
   const [buyerType, setBuyerType] = useState("standard");
-  const [mortgageRate, setMortgageRate] = useState(4.5);
+  const [mortgageRate, setMortgageRate] = useState(MARKET_RATE);
   const [mortgageTerm, setMortgageTerm] = useState(25);
-  const [salePrice, setSalePrice] = useState(420000);
+  const [income, setIncome] = useState("");
+  const [salePrice, setSalePrice] = useState(320000);
   const [agentFeePct, setAgentFeePct] = useState(1.5);
   const [agentFeeVAT, setAgentFeeVAT] = useState(true);
   const [buyerSolicitorFee, setBuyerSolicitorFee] = useState(2000);
   const [sellerSolicitorFee, setSellerSolicitorFee] = useState(1500);
   const [surveyFee, setSurveyFee] = useState(800);
-  const [removals, setRemovals] = useState(1500);
+  const [removals, setRemovals] = useState(1200);
   const [mortgageArrangement, setMortgageArrangement] = useState(999);
   const [otherCosts, setOtherCosts] = useState(500);
-  const [existingMortgage, setExistingMortgage] = useState(150000);
+  const [existingMortgage, setExistingMortgage] = useState(0);
   const [savings, setSavings] = useState(50000);
   const [tab, setTab] = useState("overview");
-  const printRef = useRef(null);
 
-  // Scenario
-  const [scenOfferPrice, setScenOfferPrice] = useState(750000);
-  const [scenSalePrice, setScenSalePrice] = useState(420000);
-  const [scenDepositPct, setScenDepositPct] = useState(20);
-  const [scenMortgageRate, setScenMortgageRate] = useState(4.5);
+  // Scenario state
+  const [scen, setScen] = useState({ offerPrice: 450000, salePrice: 320000, depositPct: 15, rate: MARKET_RATE });
 
-  // Live market rate: best 5yr fixed May 2026 (source: HomeOwners Alliance / L&C, updated 2 May 2026)
-  const MARKET_RATE = 4.35;
+  const hasSale = journey ? JOURNEYS[journey].hasSale : false;
 
-  const handleOnboardingComplete = (vals) => {
-    setOfferPrice(vals.offerPrice);
-    setDepositPct(vals.depositPct);
-    setSalePrice(vals.salePrice);
-    setExistingMortgage(vals.existingMortgage);
-    if (vals.savings) setSavings(vals.savings);
-    setMortgageRate(MARKET_RATE);
-    setMortgageTerm(vals.mortgageTerm);
-    setScenOfferPrice(vals.offerPrice);
-    setScenSalePrice(vals.salePrice);
-    setScenDepositPct(vals.depositPct);
-    setScenMortgageRate(MARKET_RATE);
-    setReady(true);
+  const pickJourney = (key) => {
+    setJourney(key);
+    setBuyerType(JOURNEYS[key].buyerType);
+    setStage("details");
   };
 
-  // Calcs
-  const depositAmount = useMemo(() => (offerPrice * depositPct) / 100, [offerPrice, depositPct]);
-  const mortgageLoan = useMemo(() => offerPrice - depositAmount, [offerPrice, depositAmount]);
-  const ltv = useMemo(() => (mortgageLoan / offerPrice) * 100, [mortgageLoan, offerPrice]);
+  const completeOnboarding = () => {
+    const n = v => Number(v) || 0;
+    const op = n(ob.offerPrice), dp = n(ob.depositPct) || 10, sp = n(ob.salePrice), em = n(ob.existingMortgage), sv = n(ob.savings);
+    setOfferPrice(op); setDepositPct(dp); setSavings(sv);
+    if (JOURNEYS[journey].hasSale) { setSalePrice(sp); setExistingMortgage(em); }
+    setScen({ offerPrice: op, salePrice: sp, depositPct: dp, rate: MARKET_RATE });
+    setTab("overview");
+    setStage("dashboard");
+  };
+
+  // ── Core calcs ──
+  const depositAmount = offerPrice * depositPct / 100;
+  const mortgageLoan = offerPrice - depositAmount;
+  const ltv = offerPrice > 0 ? (mortgageLoan / offerPrice) * 100 : 0;
   const sdlt = useMemo(() => calcSDLT(offerPrice, buyerType), [offerPrice, buyerType]);
   const mortgage = useMemo(() => calcMortgage(mortgageLoan, mortgageRate, mortgageTerm), [mortgageLoan, mortgageRate, mortgageTerm]);
-  const agentFeeBase = useMemo(() => (salePrice * agentFeePct) / 100, [salePrice, agentFeePct]);
-  const agentFeeTotal = useMemo(() => agentFeeBase * (agentFeeVAT ? 1.2 : 1), [agentFeeBase, agentFeeVAT]);
-  const grossSaleProceeds = useMemo(() => salePrice - agentFeeTotal - sellerSolicitorFee, [salePrice, agentFeeTotal, sellerSolicitorFee]);
-  const netSaleProceeds = useMemo(() => grossSaleProceeds - existingMortgage, [grossSaleProceeds, existingMortgage]);
-  const saleEquity = useMemo(() => salePrice - existingMortgage, [salePrice, existingMortgage]);
-  const saleEquityPct = useMemo(() => salePrice > 0 ? (saleEquity / salePrice) * 100 : 0, [saleEquity, salePrice]);
-  const totalBuyingCosts = useMemo(() => sdlt.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts, [sdlt.total, buyerSolicitorFee, surveyFee, removals, mortgageArrangement, otherCosts]);
-  const totalCashNeeded = useMemo(() => depositAmount + totalBuyingCosts, [depositAmount, totalBuyingCosts]);
-  const cashAvailable = useMemo(() => savings + netSaleProceeds, [savings, netSaleProceeds]);
-  const cashSurplusDeficit = useMemo(() => cashAvailable - totalCashNeeded, [cashAvailable, totalCashNeeded]);
+  const stressMortgage = useMemo(() => calcMortgage(mortgageLoan, mortgageRate + STRESS_DELTA, mortgageTerm), [mortgageLoan, mortgageRate, mortgageTerm]);
 
-  // Scenario calcs
-  const scenDepositAmt = (scenOfferPrice * scenDepositPct) / 100;
-  const scenLoan = scenOfferPrice - scenDepositAmt;
-  const scenSDLT = calcSDLT(scenOfferPrice, buyerType);
-  const scenAgentFee = (scenSalePrice * agentFeePct) / 100 * (agentFeeVAT ? 1.2 : 1);
-  const scenNetSale = scenSalePrice - scenAgentFee - sellerSolicitorFee - existingMortgage;
-  const scenBuyingCosts = scenSDLT.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
-  const scenCashNeeded = scenDepositAmt + scenBuyingCosts;
-  const scenCashAvailable = savings + scenNetSale;
-  const scenSurplus = scenCashAvailable - scenCashNeeded;
-  const scenMortgage = calcMortgage(scenLoan, scenMortgageRate, mortgageTerm);
-  const scenDiff = scenSurplus - cashSurplusDeficit;
+  const agentFeeBase = salePrice * agentFeePct / 100;
+  const agentFeeTotal = agentFeeBase * (agentFeeVAT ? 1.2 : 1);
+  const netSaleProceeds = hasSale ? salePrice - agentFeeTotal - sellerSolicitorFee - existingMortgage : 0;
+  const saleEquity = salePrice - existingMortgage;
 
-  const resetScenario = () => { setScenOfferPrice(offerPrice); setScenSalePrice(salePrice); setScenDepositPct(depositPct); setScenMortgageRate(mortgageRate); };
+  const totalBuyingCosts = sdlt.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
+  const totalCashNeeded = depositAmount + totalBuyingCosts;
+  const cashAvailable = savings + (hasSale ? netSaleProceeds : 0);
+  const surplus = cashAvailable - totalCashNeeded;
 
-  // PDF Export
+  const lti = income > 0 ? mortgageLoan / income : null;
+
+  // ── Scenario calcs ──
+  const sDeposit = scen.offerPrice * scen.depositPct / 100;
+  const sLoan = scen.offerPrice - sDeposit;
+  const sSDLT = calcSDLT(scen.offerPrice, buyerType);
+  const sAgentFee = scen.salePrice * agentFeePct / 100 * (agentFeeVAT ? 1.2 : 1);
+  const sNetSale = hasSale ? scen.salePrice - sAgentFee - sellerSolicitorFee - existingMortgage : 0;
+  const sCosts = sSDLT.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
+  const sNeeded = sDeposit + sCosts;
+  const sAvailable = savings + (hasSale ? sNetSale : 0);
+  const sSurplus = sAvailable - sNeeded;
+  const sMortgage = calcMortgage(sLoan, scen.rate, mortgageTerm);
+
+  // ── PDF export ──
   const handleExportPDF = () => {
     const win = window.open("", "_blank");
     if (!win) return;
-    const s = cashSurplusDeficit;
+    const s = surplus;
+    const saleSection = hasSale ? `
+      <div class="sec"><div class="sec-h">Cash Available</div><div class="sec-b">
+        <div class="row"><span>Sale Price</span><span>${fmt(salePrice)}</span></div>
+        <div class="row"><span>Agent Fee${agentFeeVAT ? " (incl. VAT)" : ""}</span><span>-${fmt(agentFeeTotal)}</span></div>
+        <div class="row"><span>Solicitor (sale)</span><span>-${fmt(sellerSolicitorFee)}</span></div>
+        <div class="row"><span>Mortgage Repaid</span><span>-${fmt(existingMortgage)}</span></div>
+        <div class="row"><span>Net from Sale</span><span>${fmt(netSaleProceeds)}</span></div>
+        <div class="row"><span>Savings</span><span>${fmt(savings)}</span></div>
+        <div class="total"><span>TOTAL AVAILABLE</span><span>${fmt(cashAvailable)}</span></div>
+      </div></div>` : `
+      <div class="sec"><div class="sec-h">Cash Available</div><div class="sec-b">
+        <div class="row"><span>Savings</span><span>${fmt(savings)}</span></div>
+        <div class="total"><span>TOTAL AVAILABLE</span><span>${fmt(cashAvailable)}</span></div>
+      </div></div>`;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>ChainReady Summary</title>
     <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;font-size:12px;color:#1a1a2e;background:#fff;padding:32px 36px}
-    h1{font-size:20px;font-weight:400;margin-bottom:4px}.sub{font-size:11px;color:#888;margin-bottom:20px}
-    .badge{font-size:9px;border:1px solid #c9a96e;color:#c9a96e;padding:2px 8px;border-radius:20px;display:inline-block;text-transform:uppercase;letter-spacing:.5px}
-    .verdict{padding:12px 16px;border-radius:8px;margin:16px 0;font-size:13px;font-weight:600}
+    h1{font-size:20px;font-weight:400;margin-bottom:4px}.sub{font-size:11px;color:#888;margin-bottom:18px}
+    .verdict{padding:12px 16px;border-radius:8px;margin:14px 0;font-size:13px;font-weight:600}
     .ok{background:#f0fdf4;border:1px solid #86efac;color:#16a34a}.warn{background:#fff7f6;border:1px solid #fca5a5;color:#dc2626}
-    .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+    .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
     .tile{background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;padding:10px 12px}
     .tile-l{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
     .tile-v{font-size:15px;font-weight:700;color:#1a1a2e}
@@ -377,58 +489,40 @@ function App() {
     .total{display:flex;justify-content:space-between;padding:9px 12px;background:#1a1a2e;margin:8px -12px -10px}
     .total span:first-child{color:#c9a96e;font-weight:600;font-size:11px}
     .total span:last-child{color:#c9a96e;font-size:13px;font-weight:700}
-    .footer{margin-top:16px;font-size:9px;color:#999;border-top:1px solid #e5e3de;padding-top:10px;line-height:1.5}
+    .footer{margin-top:14px;font-size:9px;color:#999;border-top:1px solid #e5e3de;padding-top:10px;line-height:1.5}
     @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{margin:1.2cm;size:A4}}
     </style></head><body>
-    <h1>ChainReady · Property Analysis</h1>
+    <h1>ChainReady · ${JOURNEYS[journey].badge} Analysis</h1>
     <div class="sub">Generated ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</div>
-    <div class="verdict ${s >= 0 ? "ok" : "warn"}">${s >= 0 ? `✓ Cash surplus of ${fmt(s)} after all costs` : `⚠ Cash shortfall of ${fmt(Math.abs(s))} — additional funds needed`}</div>
+    <div class="verdict ${s >= 0 ? "ok" : "warn"}">${s >= 0 ? "Cash surplus of " + fmt(s) + " after all costs" : "Cash shortfall of " + fmt(Math.abs(s)) + " — additional funds needed"}</div>
     <div class="tiles">
       <div class="tile"><div class="tile-l">Offer Price</div><div class="tile-v">${fmt(offerPrice)}</div></div>
-      <div class="tile"><div class="tile-l">Deposit</div><div class="tile-v">${fmt(depositAmount)}</div></div>
+      <div class="tile"><div class="tile-l">Deposit (${depositPct}%)</div><div class="tile-v">${fmt(depositAmount)}</div></div>
       <div class="tile"><div class="tile-l">Stamp Duty</div><div class="tile-v">${fmt(sdlt.total)}</div></div>
-      <div class="tile"><div class="tile-l">Monthly Mortgage</div><div class="tile-v">${fmt(mortgage.monthly)}</div></div>
-      <div class="tile"><div class="tile-l">Net Sale Proceeds</div><div class="tile-v">${fmt(netSaleProceeds)}</div></div>
+      <div class="tile"><div class="tile-l">Mortgage</div><div class="tile-v">${fmt(mortgageLoan)}</div></div>
+      <div class="tile"><div class="tile-l">Monthly (${fmtPct(mortgageRate)})</div><div class="tile-v">${fmt(mortgage.monthly)}</div></div>
       <div class="tile"><div class="tile-l">Surplus / Deficit</div><div class="tile-v" style="color:${s>=0?"#16a34a":"#dc2626"}">${s>=0?"+":""}${fmt(s)}</div></div>
     </div>
     <div class="cols">
-      <div class="sec"><div class="sec-h">Cash Needed to Buy</div><div class="sec-b">
+      <div class="sec"><div class="sec-h">Cash Needed</div><div class="sec-b">
         <div class="row"><span>Deposit (${depositPct}%)</span><span>${fmt(depositAmount)}</span></div>
         <div class="row"><span>Stamp Duty</span><span>${fmt(sdlt.total)}</span></div>
-        <div class="row"><span>Buyer's Solicitor</span><span>${fmt(buyerSolicitorFee)}</span></div>
+        <div class="row"><span>Solicitor</span><span>${fmt(buyerSolicitorFee)}</span></div>
         <div class="row"><span>Survey</span><span>${fmt(surveyFee)}</span></div>
         <div class="row"><span>Mortgage Arrangement</span><span>${fmt(mortgageArrangement)}</span></div>
         <div class="row"><span>Removals</span><span>${fmt(removals)}</span></div>
         <div class="row"><span>Other</span><span>${fmt(otherCosts)}</span></div>
-        <div class="total"><span>TOTAL TO BUY</span><span>${fmt(totalCashNeeded)}</span></div>
+        <div class="total"><span>TOTAL NEEDED</span><span>${fmt(totalCashNeeded)}</span></div>
       </div></div>
-      <div class="sec"><div class="sec-h">Cash Available from Sale</div><div class="sec-b">
-        <div class="row"><span>Sale Price</span><span>${fmt(salePrice)}</span></div>
-        <div class="row"><span>Agent Fee (incl. VAT)</span><span>-${fmt(agentFeeTotal)}</span></div>
-        <div class="row"><span>Seller's Solicitor</span><span>-${fmt(sellerSolicitorFee)}</span></div>
-        <div class="row"><span>Mortgage Repaid</span><span>-${fmt(existingMortgage)}</span></div>
-        <div class="row"><span>Net from Sale</span><span>${fmt(netSaleProceeds)}</span></div>
-        <div class="row"><span>Savings</span><span>${fmt(savings)}</span></div>
-        <div class="total"><span>TOTAL AVAILABLE</span><span>${fmt(cashAvailable)}</span></div>
-      </div></div>
+      ${saleSection}
     </div>
-    <div class="footer">Disclaimer: For illustrative purposes only. Not financial, legal or tax advice. SDLT rates reflect HMRC thresholds effective 1 April 2025. Consult a qualified adviser before making decisions.</div>
+    <div class="footer">Illustrative only — not financial, legal or tax advice. SDLT rates reflect HMRC thresholds effective 1 April 2025. Mortgage rate default of ${MARKET_RATE}% reflects the best 5-year fixed available May 2026. Consult a qualified adviser before making decisions.</div>
     </body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 600);
   };
 
-  if (!ready) return <Onboarding onComplete={handleOnboardingComplete} theme={theme} />;
-
-  const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "purchase", label: "Purchase" },
-    { id: "sale", label: "Sale" },
-    { id: "mortgage", label: "Mortgage" },
-    { id: "stampdust", label: "Stamp Duty" },
-    { id: "scenario", label: "Scenarios" },
-  ];
-
+  // ── Theme tokens ──
   const bg = d ? "#f5f4f0" : "#0f0f13";
   const surface = d ? "#fff" : "#181820";
   const border = d ? "#e0ddd8" : "#2a2a38";
@@ -437,354 +531,348 @@ function App() {
   const green = d ? "#16a34a" : "#6ec99a";
   const red = d ? "#dc2626" : "#e07b6a";
 
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "purchase", label: "Purchase" },
+    ...(hasSale ? [{ id: "sale", label: "Sale" }] : []),
+    { id: "mortgage", label: "Mortgage" },
+    { id: "stampduty", label: "Stamp Duty" },
+    { id: "scenario", label: "Scenarios" },
+  ];
+
+  const numInput = (label, v, fn) => (
+    <div key={label} style={{ marginBottom: 10 }}>
+      <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>{label}</label>
+      <input type="number" value={v} onChange={e => fn(Number(e.target.value))} style={{ width: "100%", background: d ? "#f8f7f5" : "#1e1e28", border: `1px solid ${border}`, color: text, fontFamily: "inherit", fontSize: 13, padding: "7px 10px", borderRadius: 7 }} />
+    </div>
+  );
+
+  // ── Render ──
   return (
-    <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: "'DM Sans', 'Outfit', sans-serif", fontSize: 14 }}>
-      <style>{`
-        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#c9a96e;border:2px solid ${bg};cursor:pointer;}
-        input[type=number]{-moz-appearance:textfield;}
-        input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
-        *{box-sizing:border-box;margin:0;padding:0;}
-      `}</style>
+    <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: "'Outfit', sans-serif", fontSize: 14, display: "flex", flexDirection: "column" }}>
+      <Header theme={theme} setTheme={setTheme} onExport={handleExportPDF} showExport={stage === "dashboard"} journey={stage !== "journey" ? journey : null} onChangeJourney={() => setStage("journey")} />
 
-      {/* Header */}
-      <div style={{ background: surface, borderBottom: `1px solid ${border}`, position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ padding: "12px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <a href="https://fasanya.co.uk" style={{ fontSize: 11, color: muted, textDecoration: "none", letterSpacing: "0.3px", display: "flex", alignItems: "center", gap: 4 }}>
-              ← fasanya.co.uk
-            </a>
-            <span style={{ color: border }}>|</span>
-            <span style={{ fontFamily: "'Georgia', serif", fontSize: 15, fontWeight: 400, color: text, letterSpacing: "0.5px" }}>ChainReady</span>
-            <span style={{ fontSize: 9, color: "#c9a96e", border: "1px solid #c9a96e", padding: "1px 7px", borderRadius: 20, letterSpacing: "0.5px", textTransform: "uppercase" }}>UK · 2026</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {/* Subtle PDF link */}
-            <button onClick={handleExportPDF} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: muted, display: "flex", alignItems: "center", gap: 4, padding: "4px 0", fontFamily: "inherit" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              PDF
-            </button>
-            {/* Theme toggle */}
-            <button onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} style={{ background: d ? "#f0ede8" : "#2a2a38", border: `1px solid ${border}`, borderRadius: 20, padding: "4px 10px", cursor: "pointer", fontSize: 11, color: text, display: "flex", alignItems: "center", gap: 5, fontFamily: "inherit" }}>
-              {d ? "🌙 Dark" : "☀️ Light"}
-            </button>
-          </div>
-        </div>
-        {/* Tabs */}
-        <div style={{ display: "flex", overflowX: "auto", paddingTop: 4 }}>
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: "8px 15px", fontSize: 12, fontWeight: 500, color: tab === t.id ? "#c9a96e" : muted,
-              border: "none", background: "none", cursor: "pointer", borderBottom: tab === t.id ? "2px solid #c9a96e" : "2px solid transparent",
-              whiteSpace: "nowrap", fontFamily: "inherit", transition: "all 0.15s",
-            }}>{t.label}</button>
-          ))}
-        </div>
-      </div>
+      {stage === "journey" && <JourneyPicker onPick={pickJourney} theme={theme} />}
+      {stage === "details" && <DetailsForm journey={journey} values={ob} setValues={setOb} onBack={() => setStage("journey")} onComplete={completeOnboarding} theme={theme} />}
 
-      {/* Content */}
-      <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 13 }}>
-
-        {/* OVERVIEW */}
-        {tab === "overview" && (<>
-          {/* Verdict */}
-          <div style={{ borderRadius: 12, padding: "13px 16px", display: "flex", alignItems: "center", gap: 12, background: cashSurplusDeficit >= 0 ? (d ? "rgba(22,163,74,0.08)" : "rgba(110,201,154,0.1)") : (d ? "rgba(220,38,38,0.08)" : "rgba(224,123,106,0.1)"), border: `1px solid ${cashSurplusDeficit >= 0 ? (d ? "rgba(22,163,74,0.3)" : "rgba(110,201,154,0.25)") : (d ? "rgba(220,38,38,0.3)" : "rgba(224,123,106,0.25)")}` }}>
-            <span style={{ fontSize: 20 }}>{cashSurplusDeficit >= 0 ? "✓" : "⚠"}</span>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13, color: cashSurplusDeficit >= 0 ? green : red }}>
-                {cashSurplusDeficit >= 0 ? `You're ${fmt(cashSurplusDeficit)} ahead after all costs` : `Shortfall of ${fmt(Math.abs(cashSurplusDeficit))} — review your numbers`}
-              </div>
-              <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>Based on current inputs · Use Scenarios tab to stress-test</div>
-            </div>
-          </div>
-
-          {/* Summary tiles */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 9 }}>
-            {[
-              { label: "Offer Price", value: fmt(offerPrice), sub: "New property", accent: true },
-              { label: "Deposit", value: fmt(depositAmount), sub: `${depositPct}% · LTV ${fmtPct(ltv)}` },
-              { label: "Stamp Duty", value: fmt(sdlt.total), sub: buyerType === "firstTime" ? "First-time buyer" : buyerType === "additional" ? "Additional property" : "Standard" },
-              { label: "Monthly Payment", value: fmt(mortgage.monthly), sub: `${fmtPct(mortgageRate)} · ${mortgageTerm}yr` },
-              { label: "Net Sale Proceeds", value: fmt(netSaleProceeds), sub: `Equity: ${fmt(saleEquity)}` },
-              { label: "Cash Surplus/Deficit", value: (cashSurplusDeficit >= 0 ? "+" : "") + fmt(cashSurplusDeficit), sub: "After all costs", pos: cashSurplusDeficit >= 0, neg: cashSurplusDeficit < 0 },
-            ].map((t, i) => (
-              <div key={i} style={{ background: surface, border: `1px solid ${border}`, borderRadius: 12, padding: "11px 13px" }}>
-                <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{t.label}</div>
-                <div style={{ fontSize: 17, fontFamily: "'Georgia', serif", fontWeight: 700, color: t.accent ? "#c9a96e" : t.pos ? green : t.neg ? red : text }}>{t.value}</div>
-                {t.sub && <div style={{ fontSize: 10, color: muted, marginTop: 3 }}>{t.sub}</div>}
-              </div>
+      {stage === "dashboard" && (
+        <div style={{ flex: 1 }}>
+          <div style={{ background: surface, borderBottom: `1px solid ${border}`, display: "flex", overflowX: "auto", position: "sticky", top: 0, zIndex: 50 }}>
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{
+                padding: "10px 16px", fontSize: 12, fontWeight: 500, color: tab === t.id ? "#c9a96e" : muted,
+                border: "none", background: "none", cursor: "pointer", borderBottom: tab === t.id ? "2px solid #c9a96e" : "2px solid transparent",
+                whiteSpace: "nowrap", fontFamily: "inherit",
+              }}>{t.label}</button>
             ))}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
-            <Card title="Cash Needed to Buy" accent="#e07b6a" theme={theme}>
-              <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} theme={theme} />
-              <CostRow label="Stamp Duty" value={sdlt.total} theme={theme} />
-              <CostRow label="Buyer's Solicitor" value={buyerSolicitorFee} theme={theme} />
-              <CostRow label="Survey" value={surveyFee} theme={theme} />
-              <CostRow label="Mortgage Arrangement" value={mortgageArrangement} theme={theme} />
-              <CostRow label="Removals" value={removals} theme={theme} />
-              <CostRow label="Other" value={otherCosts} theme={theme} />
-              <CostRow label="TOTAL TO BUY" value={totalCashNeeded} highlight theme={theme} />
-            </Card>
-            <Card title="Cash Available from Sale" accent="#6ec99a" theme={theme}>
-              <CostRow label="Sale Price" value={salePrice} theme={theme} />
-              <CostRow label="Agent Fee" value={-agentFeeTotal} sub={`${agentFeePct}%${agentFeeVAT?" +VAT":""}`} theme={theme} />
-              <CostRow label="Seller's Solicitor" value={-sellerSolicitorFee} theme={theme} />
-              <CostRow label="Mortgage Repaid" value={-existingMortgage} theme={theme} />
-              <CostRow label="Net from Sale" value={netSaleProceeds} highlight theme={theme} />
-              <div style={{ marginTop: 6 }}>
-                <CostRow label="Savings" value={savings} theme={theme} />
-                <CostRow label="TOTAL AVAILABLE" value={cashAvailable} highlight theme={theme} />
-              </div>
-            </Card>
-          </div>
+          <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 13, maxWidth: 980, margin: "0 auto" }}>
 
-          <div style={{ background: d ? "rgba(201,169,110,0.07)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, padding: "9px 12px", fontSize: 11, color: d ? "#7a6030" : "#8a87a0", lineHeight: 1.6 }}>
-            <strong style={{ color: "#c9a96e" }}>SDLT (post April 2025):</strong> 0% up to £125k · 2% up to £250k · 5% up to £925k · 10% up to £1.5m · 12% above. Additional property +5%.
-          </div>
-          <button onClick={() => setReady(false)} style={{ alignSelf: "flex-start", background: "none", border: `1px solid ${border}`, borderRadius: 6, padding: "5px 12px", fontSize: 11, color: muted, cursor: "pointer", fontFamily: "inherit" }}>← Edit my numbers</button>
-        </>)}
-
-        {/* PURCHASE */}
-        {tab === "purchase" && (<>
-          <Card title="Purchase Details" theme={theme}>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Buyer Type</div>
-              <PillToggle options={[{ value: "standard", label: "Standard" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional Property" }]} value={buyerType} onChange={setBuyerType} theme={theme} />
-            </div>
-            <SliderInput label="Offer / Purchase Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} theme={theme} />
-            <SliderInput label="Deposit %" value={depositPct} onChange={setDepositPct} min={5} max={50} step={1} prefix="" suffix="%" theme={theme} />
-          </Card>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
-            <Card title="Deposit & Loan" theme={theme}>
-              <CostRow label="Offer Price" value={offerPrice} theme={theme} />
-              <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} theme={theme} />
-              <CostRow label="Mortgage Required" value={mortgageLoan} highlight theme={theme} />
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>LTV {fmtPct(ltv)}</div>
-                <div style={{ height: 7, borderRadius: 4, background: d ? "#e0ddd8" : "#2a2a38", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${ltv}%`, background: "linear-gradient(90deg,#c9a96e,#7eb8b0)" }} />
+            {/* ── OVERVIEW ── */}
+            {tab === "overview" && (<React.Fragment>
+              <div style={{ borderRadius: 12, padding: "13px 16px", background: surplus >= 0 ? (d ? "rgba(22,163,74,0.08)" : "rgba(110,201,154,0.1)") : (d ? "rgba(220,38,38,0.08)" : "rgba(224,123,106,0.1)"), border: `1px solid ${surplus >= 0 ? (d ? "rgba(22,163,74,0.3)" : "rgba(110,201,154,0.25)") : (d ? "rgba(220,38,38,0.3)" : "rgba(224,123,106,0.25)")}` }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: surplus >= 0 ? green : red }}>
+                  {surplus >= 0 ? `You're ${fmt(surplus)} ahead after every cost` : `Shortfall of ${fmt(Math.abs(surplus))} — adjust your numbers or plan extra funds`}
+                </div>
+                <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>
+                  {hasSale ? "Based on your purchase and sale together" : "Based on your savings against deposit and all buying costs"} · Stress-test on the Scenarios tab
                 </div>
               </div>
-            </Card>
-            <Card title="Buying Costs" theme={theme}>
-              {[["Solicitor (£)", buyerSolicitorFee, setBuyerSolicitorFee],["Survey (£)", surveyFee, setSurveyFee],["Mortgage Arrangement (£)", mortgageArrangement, setMortgageArrangement],["Removals (£)", removals, setRemovals],["Other (£)", otherCosts, setOtherCosts]].map(([l,v,fn]) => (
-                <div key={l} style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>{l}</label>
-                  <input type="number" value={v} onChange={e => fn(Number(e.target.value))} style={{ width: "100%", background: d ? "#f8f7f5" : "#1e1e28", border: `1px solid ${border}`, color: text, fontFamily: "inherit", fontSize: 13, padding: "7px 10px", borderRadius: 7, outline: "none" }} />
-                </div>
-              ))}
-            </Card>
-          </div>
-        </>)}
 
-        {/* SALE */}
-        {tab === "sale" && (<>
-          <Card title="Current Flat Sale" theme={theme}>
-            <SliderInput label="Expected Sale Price" value={salePrice} onChange={setSalePrice} min={100000} max={2000000} step={5000} theme={theme} />
-            <SliderInput label="Existing Mortgage" value={existingMortgage} onChange={setExistingMortgage} min={0} max={Math.min(salePrice,1500000)} step={5000} hint={`Equity: ${fmt(saleEquity)} (${saleEquityPct.toFixed(1)}%)`} theme={theme} />
-            <SliderInput label="Agent Fee %" value={agentFeePct} onChange={setAgentFeePct} min={0.5} max={3.5} step={0.1} prefix="" suffix="%" hint="Typical London: 1.0–2.0%" theme={theme} />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0" }}>
-              <div>
-                <div style={{ fontSize: 12, color: muted }}>Agent Fee includes VAT (20%)</div>
-              </div>
-              <div onClick={() => setAgentFeeVAT(v => !v)} style={{ width: 32, height: 18, borderRadius: 10, background: agentFeeVAT ? "#c9a96e" : (d ? "#ddd" : "#2a2a38"), cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
-                <div style={{ position: "absolute", width: 12, height: 12, borderRadius: "50%", background: "#fff", top: 3, left: agentFeeVAT ? 17 : 3, transition: "left 0.2s" }} />
-              </div>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              {[["Seller's Solicitor (£)", sellerSolicitorFee, setSellerSolicitorFee],["Additional Savings (£)", savings, setSavings]].map(([l,v,fn]) => (
-                <div key={l} style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>{l}</label>
-                  <input type="number" value={v} onChange={e => fn(Number(e.target.value))} style={{ width: "100%", background: d ? "#f8f7f5" : "#1e1e28", border: `1px solid ${border}`, color: text, fontFamily: "inherit", fontSize: 13, padding: "7px 10px", borderRadius: 7, outline: "none" }} />
-                </div>
-              ))}
-            </div>
-          </Card>
-          <Card title="Sale Proceeds Breakdown" theme={theme}>
-            <CostRow label="Gross Sale Price" value={salePrice} theme={theme} />
-            <CostRow label="Agent Fee (excl VAT)" value={-agentFeeBase} sub={`${agentFeePct}%`} theme={theme} />
-            {agentFeeVAT && <CostRow label="VAT on Agent Fee" value={-(agentFeeTotal - agentFeeBase)} theme={theme} />}
-            <CostRow label="Seller's Solicitor" value={-sellerSolicitorFee} theme={theme} />
-            <CostRow label="Gross Proceeds" value={grossSaleProceeds} highlight theme={theme} />
-            <div style={{ marginTop: 6 }}>
-              <CostRow label="Mortgage Repaid" value={-existingMortgage} theme={theme} />
-              <CostRow label="Net Cash from Sale" value={netSaleProceeds} highlight theme={theme} />
-            </div>
-            <div style={{ height: 8, borderRadius: 4, background: d ? "#e0ddd8" : "#2a2a38", overflow: "hidden", margin: "14px 0 4px" }}>
-              <div style={{ height: "100%", width: `${Math.min(100,Math.max(0,saleEquityPct))}%`, background: "linear-gradient(90deg,#c9a96e,#7eb8b0)" }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: muted }}>
-              <span>Equity {fmt(saleEquity)} ({saleEquityPct.toFixed(1)}%)</span>
-              <span>Mortgage {fmt(existingMortgage)}</span>
-            </div>
-          </Card>
-        </>)}
-
-        {/* MORTGAGE */}
-        {tab === "mortgage" && (<>
-          <Card title="Mortgage Calculator" subtitle="Rate pre-filled: 4.35% best 5-yr fixed (HomeOwners Alliance / L&C, May 2026)" theme={theme}>
-            <SliderInput label="Interest Rate" value={mortgageRate} onChange={setMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" hint="Pre-filled: best 5-yr fixed May 2026 (4.35%). Adjust to match your own quote." theme={theme} />
-            <SliderInput label="Term" value={mortgageTerm} onChange={setMortgageTerm} min={5} max={35} step={1} prefix="" suffix=" years" theme={theme} />
-          </Card>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
-            <Card title="Monthly Repayment" theme={theme}>
-              <div style={{ textAlign: "center", padding: "14px 0" }}>
-                <div style={{ fontSize: 10, color: muted, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>Monthly Payment</div>
-                <div style={{ fontSize: 34, fontFamily: "'Georgia', serif", color: "#c9a96e", fontWeight: 700 }}>{fmt(mortgage.monthly)}</div>
-                <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>per month · {mortgageTerm} years</div>
-              </div>
-              <CostRow label="Loan Amount" value={mortgageLoan} theme={theme} />
-              <CostRow label="Total Repaid" value={mortgage.total} theme={theme} />
-              <CostRow label="Total Interest" value={mortgage.interest} theme={theme} />
-            </Card>
-            <Card title="Rate Sensitivity" theme={theme}>
-              {[[-1,-0.5,0,0.5,1]].flat().map(delta => {
-                const m = calcMortgage(mortgageLoan, mortgageRate + delta, mortgageTerm);
-                const diff = m.monthly - mortgage.monthly;
-                return (
-                  <div key={delta} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${border}`, fontSize: 12 }}>
-                    <span style={{ color: muted }}>{delta === 0 ? "Base rate" : `${delta > 0 ? "+" : ""}${delta}%`} ({fmtPct(mortgageRate + delta)})</span>
-                    <span style={{ fontWeight: 600, color: delta === 0 ? "#c9a96e" : diff > 0 ? red : green }}>{delta === 0 ? fmt(mortgage.monthly) : `${diff > 0 ? "+" : ""}${fmt(diff)}/mo`}</span>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 9 }}>
+                {[
+                  { label: "Offer Price", value: fmt(offerPrice), sub: JOURNEYS[journey].badge, accent: true },
+                  { label: "Deposit", value: fmt(depositAmount), sub: `${depositPct}% · LTV ${fmtPct(ltv)}` },
+                  { label: "Stamp Duty", value: fmt(sdlt.total), sub: buyerType === "firstTime" ? "FTB relief applied" : buyerType === "additional" ? "+5% surcharge" : "Standard rates" },
+                  { label: "Monthly Payment", value: fmt(mortgage.monthly), sub: `${fmtPct(mortgageRate)} · ${mortgageTerm}yr` },
+                  ...(hasSale ? [{ label: "Net Sale Proceeds", value: fmt(netSaleProceeds), sub: `Equity ${fmt(saleEquity)}` }] : [{ label: "Total Cash Needed", value: fmt(totalCashNeeded), sub: "Deposit + all costs" }]),
+                  { label: "Surplus / Deficit", value: (surplus >= 0 ? "+" : "") + fmt(surplus), sub: "After all costs", pos: surplus >= 0, neg: surplus < 0 },
+                ].map((t, i) => (
+                  <div key={i} style={{ background: surface, border: `1px solid ${border}`, borderRadius: 12, padding: "11px 13px" }}>
+                    <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{t.label}</div>
+                    <div style={{ fontSize: 17, fontFamily: "'Georgia', serif", fontWeight: 700, color: t.accent ? "#c9a96e" : t.pos ? green : t.neg ? red : text }}>{t.value}</div>
+                    {t.sub && <div style={{ fontSize: 10, color: muted, marginTop: 3 }}>{t.sub}</div>}
                   </div>
-                );
-              })}
-            </Card>
-          </div>
-        </>)}
-
-        {/* STAMP DUTY */}
-        {tab === "stampdust" && (<>
-          <Card title="Stamp Duty Land Tax" subtitle="England & NI · Post 1 April 2025 · Source: HMRC" theme={theme}>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Buyer Type</div>
-              <PillToggle options={[{ value: "standard", label: "Standard" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional (+5%)" }]} value={buyerType} onChange={setBuyerType} theme={theme} />
-            </div>
-            <SliderInput label="Property Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} theme={theme} />
-          </Card>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
-            <Card title="Band Breakdown" accent="#7eb8b0" theme={theme}>
-              {sdlt.bands.map((b, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${border}` }}>
-                  <span style={{ fontSize: 11, color: muted, width: 160, flexShrink: 0 }}>{b.label}</span>
-                  <div style={{ flex: 1, height: 4, background: d ? "#e0ddd8" : "#2a2a38", borderRadius: 2 }}>
-                    <div style={{ height: "100%", width: `${sdlt.total > 0 ? Math.min(100, b.tax / sdlt.total * 100) : 0}%`, background: "#7eb8b0", borderRadius: 2 }} />
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "#7eb8b0", width: 28, textAlign: "right" }}>{b.rate}%</span>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: text, width: 70, textAlign: "right" }}>{fmt(b.tax)}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "11px 0 0", borderTop: `1px solid ${border}`, marginTop: 6 }}>
-                <span style={{ fontWeight: 600, fontSize: 12, color: text }}>Total SDLT</span>
-                <span style={{ fontWeight: 700, fontSize: 16, color: "#c9a96e", fontFamily: "'Georgia', serif" }}>{fmt(sdlt.total)}</span>
+                ))}
               </div>
-            </Card>
-            <Card title="Rate Table" theme={theme}>
-              <div style={{ fontSize: 10, color: muted, marginBottom: 8 }}>Standard Residential · Post 1 April 2025</div>
-              {[["£0 – £125,000","0%"],["£125,001 – £250,000","2%"],["£250,001 – £925,000","5%"],["£925,001 – £1,500,000","10%"],["Above £1,500,000","12%"]].map(([b,r]) => (
-                <div key={b} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${border}`, fontSize: 11 }}>
-                  <span style={{ color: muted }}>{b}</span><span style={{ fontWeight: 600, color: "#7eb8b0" }}>{r}</span>
-                </div>
-              ))}
-              <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 8, background: d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: muted, lineHeight: 1.6 }}>
-                <strong style={{ color: "#c9a96e" }}>First-Time:</strong> 0% to £300k · 5% £300k–£500k<br />
-                <strong style={{ color: "#c9a96e" }}>Additional:</strong> +5% surcharge all bands
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 13 }}>
+                <Card title="Cash Needed to Buy" accent="#e07b6a" theme={theme}>
+                  <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} theme={theme} />
+                  <CostRow label="Stamp Duty" value={sdlt.total} theme={theme} />
+                  <CostRow label="Solicitor (purchase)" value={buyerSolicitorFee} theme={theme} />
+                  <CostRow label="Survey" value={surveyFee} theme={theme} />
+                  <CostRow label="Mortgage Arrangement" value={mortgageArrangement} theme={theme} />
+                  <CostRow label="Removals" value={removals} theme={theme} />
+                  <CostRow label="Other" value={otherCosts} theme={theme} />
+                  <CostRow label="TOTAL NEEDED" value={totalCashNeeded} highlight theme={theme} />
+                </Card>
+                <Card title="Cash Available" accent="#6ec99a" theme={theme}>
+                  {hasSale && (<React.Fragment>
+                    <CostRow label="Sale Price" value={salePrice} theme={theme} />
+                    <CostRow label="Agent Fee" value={-agentFeeTotal} sub={`${agentFeePct}%${agentFeeVAT ? " +VAT" : ""}`} theme={theme} />
+                    <CostRow label="Solicitor (sale)" value={-sellerSolicitorFee} theme={theme} />
+                    <CostRow label="Mortgage Repaid" value={-existingMortgage} theme={theme} />
+                    <CostRow label="Net from Sale" value={netSaleProceeds} highlight theme={theme} />
+                    <div style={{ marginTop: 6 }} />
+                  </React.Fragment>)}
+                  <CostRow label="Savings" value={savings} theme={theme} />
+                  <CostRow label="TOTAL AVAILABLE" value={cashAvailable} highlight theme={theme} />
+                </Card>
               </div>
-            </Card>
-          </div>
-        </>)}
 
-        {/* SCENARIO */}
-        {tab === "scenario" && (<>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontFamily: "'Georgia', serif", fontSize: 14, color: text }}>Adjust the levers below</div>
-              <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>See the cash impact in real time</div>
-            </div>
-            <button onClick={resetScenario} style={{ fontSize: 11, color: muted, background: "none", border: `1px solid ${border}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit" }}>↺ Reset</button>
-          </div>
+              {lti !== null && lti > LTI_CAP && (
+                <div style={{ borderRadius: 10, padding: "10px 14px", background: d ? "rgba(220,38,38,0.06)" : "rgba(224,123,106,0.08)", border: `1px solid ${d ? "rgba(220,38,38,0.2)" : "rgba(224,123,106,0.2)"}`, fontSize: 12, color: red }}>
+                  Heads-up: your loan is {lti.toFixed(1)}× your income — most lenders cap at ~{LTI_CAP}×. See the Mortgage tab.
+                </div>
+              )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[
-              { label: "Offer Price", val: scenOfferPrice, set: setScenOfferPrice, base: offerPrice, min: Math.max(50000, offerPrice-250000), max: offerPrice+300000, step: 5000, lowerBetter: true, sub: () => `Deposit: ${fmt(scenDepositAmt)} · SDLT: ${fmt(scenSDLT.total)}`, insight: "↑ offer = more deposit & SDLT" },
-              { label: "Sale Price", val: scenSalePrice, set: setScenSalePrice, base: salePrice, min: Math.max(50000, salePrice-200000), max: salePrice+200000, step: 5000, lowerBetter: false, sub: () => `Net: ${fmt(scenNetSale)}`, insight: "↑ sale = more cash available" },
-              { label: "Deposit %", val: scenDepositPct, set: setScenDepositPct, base: depositPct, min: 5, max: 50, step: 1, prefix: "", suffix: "%", lowerBetter: true, sub: () => `${fmt(scenDepositAmt)} · LTV ${fmtPct(100-scenDepositPct)}`, insight: "↑ deposit = less mortgage, more upfront" },
-              { label: "Mortgage Rate", val: scenMortgageRate, set: setScenMortgageRate, base: mortgageRate, min: 1, max: 10, step: 0.05, prefix: "", suffix: "%", lowerBetter: true, sub: () => `${fmt(scenMortgage.monthly)}/mo`, insight: "↑ rate = higher monthly cost" },
-            ].map(({ label, val, set, base, min, max, step, prefix = "£", suffix = "", lowerBetter, sub, insight }) => {
-              const d2 = val - base;
-              const chip = d2 === 0 ? "neu" : (lowerBetter ? d2 < 0 : d2 > 0) ? "pos" : "neg";
-              const chipColor = chip === "neu" ? muted : chip === "pos" ? green : red;
-              return (
-                <div key={label} style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 3 }}>{label}</div>
-                      <div style={{ fontSize: 18, fontFamily: "'Georgia', serif", fontWeight: 700, color: text }}>{prefix}{val.toLocaleString("en-GB")}{suffix}</div>
-                      <div style={{ fontSize: 11, color: muted, marginTop: 1 }}>{sub()}</div>
+              <div style={{ background: "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, padding: "9px 12px", fontSize: 11, color: d ? "#7a6030" : "#8a87a0", lineHeight: 1.6 }}>
+                <strong style={{ color: "#c9a96e" }}>SDLT (England & NI, post April 2025):</strong> 0% to £125k · 2% to £250k · 5% to £925k · 10% to £1.5m · 12% above. First-time buyers: 0% to £300k (relief up to £500k). Additional property: +5% on every band.
+              </div>
+              <button onClick={() => setStage("details")} style={{ alignSelf: "flex-start", background: "none", border: `1px solid ${border}`, borderRadius: 6, padding: "5px 12px", fontSize: 11, color: muted, cursor: "pointer", fontFamily: "inherit" }}>← Edit my numbers</button>
+            </React.Fragment>)}
+
+            {/* ── PURCHASE ── */}
+            {tab === "purchase" && (<React.Fragment>
+              <Card title="Purchase Details" theme={theme}>
+                <SliderInput label="Offer / Purchase Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} theme={theme} />
+                <SliderInput label="Deposit" value={depositPct} onChange={setDepositPct} min={5} max={60} step={1} prefix="" suffix="%" theme={theme} />
+              </Card>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 13 }}>
+                <Card title="Deposit & Loan" theme={theme}>
+                  <CostRow label="Offer Price" value={offerPrice} theme={theme} />
+                  <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} theme={theme} />
+                  <CostRow label="Mortgage Required" value={mortgageLoan} highlight theme={theme} />
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>Loan-to-value: {fmtPct(ltv)}</div>
+                    <div style={{ height: 7, borderRadius: 4, background: d ? "#e0ddd8" : "#2a2a38", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${Math.min(100, ltv)}%`, background: "linear-gradient(90deg,#c9a96e,#7eb8b0)" }} />
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: `${chipColor}22`, color: chipColor }}>
-                      {d2 === 0 ? "Base" : `${d2 > 0 ? "+" : ""}${prefix}${Math.abs(d2).toLocaleString("en-GB")}${suffix}`}
-                    </span>
-                  </div>
-                  <SliderInput value={val} onChange={set} min={min} max={max} step={step} prefix={prefix} suffix={suffix} theme={theme} />
-                  <div style={{ fontSize: 10, color: muted, marginTop: 4, borderTop: `1px solid ${border}`, paddingTop: 6 }}>{insight} · Base: {prefix}{base.toLocaleString("en-GB")}{suffix}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Outcome panel */}
-          <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ padding: "11px 15px", borderBottom: `1px solid ${border}`, fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.5px" }}>What this means for you</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
-              {[
-                { label: "Base Case", val: cashSurplusDeficit, sub: `${fmt(mortgage.monthly)}/mo`, highlight: false },
-                { label: "Your Scenario", val: scenSurplus, sub: `${fmt(scenMortgage.monthly)}/mo`, highlight: true },
-                { label: "Change vs Base", val: scenDiff, sub: scenMortgage.monthly === mortgage.monthly ? "No monthly change" : `${scenMortgage.monthly > mortgage.monthly ? "+" : ""}${fmt(scenMortgage.monthly - mortgage.monthly)}/mo`, highlight: false },
-              ].map(({ label, val, sub, highlight }) => (
-                <div key={label} style={{ padding: "16px 14px", textAlign: "center", background: highlight ? (d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.05)") : "transparent", borderRight: `1px solid ${border}` }}>
-                  <div style={{ fontSize: 10, color: highlight ? "#c9a96e" : muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 7 }}>{label}</div>
-                  <div style={{ fontSize: 22, fontFamily: "'Georgia', serif", fontWeight: 700, color: val >= 0 ? green : red }}>{val >= 0 ? "+" : ""}{fmt(val)}</div>
-                  <div style={{ fontSize: 10, color: muted, marginTop: 4 }}>{sub}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ padding: "10px 15px" }}>
-              {[
-                { label: "Total Cash Needed", base: totalCashNeeded, scen: scenCashNeeded, lb: true },
-                { label: "Total Cash Available", base: cashAvailable, scen: scenCashAvailable, lb: false },
-                { label: "Deposit Required", base: depositAmount, scen: scenDepositAmt, lb: true },
-                { label: "Stamp Duty", base: sdlt.total, scen: scenSDLT.total, lb: true },
-                { label: "Monthly Mortgage", base: mortgage.monthly, scen: scenMortgage.monthly, lb: true },
-              ].map(({ label, base, scen, lb }) => {
-                const diff = scen - base;
-                const good = lb ? diff <= 0 : diff >= 0;
-                const c = diff === 0 ? muted : good ? green : red;
-                return (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${border}` }}>
-                    <span style={{ fontSize: 12, color: muted }}>{label}</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                      <span style={{ fontSize: 11, color: muted }}>{fmt(base)}</span>
-                      <span style={{ fontSize: 11, color: muted }}>→</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: text }}>{fmt(scen)}</span>
-                      <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: `${c}22`, color: c }}>{diff === 0 ? "No change" : `${diff > 0 ? "+" : ""}${fmt(diff)}`}</span>
+                    <div style={{ fontSize: 10, color: muted, marginTop: 4 }}>
+                      {ltv > 90 ? "Above 90% LTV — fewer products, higher rates" : ltv > 75 ? "75–90% LTV — mainstream territory" : "Below 75% LTV — access to the best rates"}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </>)}
+                </Card>
+                <Card title="Buying Costs" subtitle="Adjust to match your quotes" theme={theme}>
+                  {numInput("Solicitor / conveyancing (£)", buyerSolicitorFee, setBuyerSolicitorFee)}
+                  {numInput("Survey (£)", surveyFee, setSurveyFee)}
+                  {numInput("Mortgage arrangement (£)", mortgageArrangement, setMortgageArrangement)}
+                  {numInput("Removals (£)", removals, setRemovals)}
+                  {numInput("Other (£)", otherCosts, setOtherCosts)}
+                </Card>
+              </div>
+              {!hasSale && <Card title="Savings" theme={theme}>{numInput("Savings available (£)", savings, setSavings)}</Card>}
+            </React.Fragment>)}
 
-      </div>
+            {/* ── SALE ── */}
+            {tab === "sale" && hasSale && (<React.Fragment>
+              <Card title="Your Current Property Sale" theme={theme}>
+                <SliderInput label="Expected Sale Price" value={salePrice} onChange={setSalePrice} min={100000} max={2000000} step={5000} theme={theme} />
+                <SliderInput label="Existing Mortgage" value={existingMortgage} onChange={setExistingMortgage} min={0} max={Math.max(100000, salePrice)} step={5000} hint={`Equity: ${fmt(saleEquity)}`} theme={theme} />
+                <SliderInput label="Agent Fee" value={agentFeePct} onChange={setAgentFeePct} min={0.5} max={3.5} step={0.1} prefix="" suffix="%" hint="Typical UK: 1.0–2.0% + VAT" theme={theme} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0" }}>
+                  <span style={{ fontSize: 12, color: muted }}>Agent fee includes VAT (20%)</span>
+                  <div onClick={() => setAgentFeeVAT(v => !v)} style={{ width: 32, height: 18, borderRadius: 10, background: agentFeeVAT ? "#c9a96e" : (d ? "#ddd" : "#2a2a38"), cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                    <div style={{ position: "absolute", width: 12, height: 12, borderRadius: "50%", background: "#fff", top: 3, left: agentFeeVAT ? 17 : 3, transition: "left 0.2s" }} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  {numInput("Solicitor — sale side (£)", sellerSolicitorFee, setSellerSolicitorFee)}
+                  {numInput("Additional savings (£)", savings, setSavings)}
+                </div>
+              </Card>
+              <Card title="Sale Proceeds Breakdown" theme={theme}>
+                <CostRow label="Gross Sale Price" value={salePrice} theme={theme} />
+                <CostRow label="Agent Fee (excl VAT)" value={-agentFeeBase} sub={`${agentFeePct}%`} theme={theme} />
+                {agentFeeVAT && <CostRow label="VAT on Agent Fee" value={-(agentFeeTotal - agentFeeBase)} theme={theme} />}
+                <CostRow label="Solicitor (sale)" value={-sellerSolicitorFee} theme={theme} />
+                <CostRow label="Mortgage Repaid" value={-existingMortgage} theme={theme} />
+                <CostRow label="Net Cash from Sale" value={netSaleProceeds} highlight theme={theme} />
+              </Card>
+            </React.Fragment>)}
+
+            {/* ── MORTGAGE ── */}
+            {tab === "mortgage" && (<React.Fragment>
+              <Card title="Mortgage Calculator" subtitle={`Rate pre-filled at ${MARKET_RATE}% — best 5-yr fixed, May 2026 (HomeOwners Alliance / L&C). Adjust to your quote.`} theme={theme}>
+                <SliderInput label="Interest Rate" value={mortgageRate} onChange={setMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" theme={theme} />
+                <SliderInput label="Term" value={mortgageTerm} onChange={setMortgageTerm} min={5} max={40} step={1} prefix="" suffix=" years" theme={theme} />
+              </Card>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 13 }}>
+                <Card title="Monthly Repayment" theme={theme}>
+                  <div style={{ textAlign: "center", padding: "12px 0" }}>
+                    <div style={{ fontSize: 10, color: muted, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>Monthly Payment</div>
+                    <div style={{ fontSize: 34, fontFamily: "'Georgia', serif", color: "#c9a96e", fontWeight: 700 }}>{fmt(mortgage.monthly)}</div>
+                    <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>{fmtPct(mortgageRate)} · {mortgageTerm} years</div>
+                  </div>
+                  <CostRow label="Loan Amount" value={mortgageLoan} theme={theme} />
+                  <CostRow label="Total Repaid" value={mortgage.total} theme={theme} />
+                  <CostRow label="Total Interest" value={mortgage.interest} theme={theme} />
+                </Card>
+                <Card title="Rate Sensitivity" subtitle="What your payment becomes if rates move" theme={theme}>
+                  {[-1, -0.5, 0, 0.5, 1].map(delta => {
+                    const m = calcMortgage(mortgageLoan, mortgageRate + delta, mortgageTerm);
+                    const diff = m.monthly - mortgage.monthly;
+                    return (
+                      <div key={delta} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${border}`, fontSize: 12 }}>
+                        <span style={{ color: muted }}>{delta === 0 ? "Your rate" : (delta > 0 ? "+" : "") + delta + "%"} ({fmtPct(mortgageRate + delta)})</span>
+                        <span style={{ fontWeight: 600, color: delta === 0 ? "#c9a96e" : diff > 0 ? red : green }}>{delta === 0 ? fmt(mortgage.monthly) : (diff > 0 ? "+" : "") + fmt(diff) + "/mo"}</span>
+                      </div>
+                    );
+                  })}
+                  <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 8, background: d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: muted, lineHeight: 1.6 }}>
+                    <strong style={{ color: "#c9a96e" }}>Lender stress test:</strong> at {fmtPct(mortgageRate + STRESS_DELTA)} your payment would be {fmt(stressMortgage.monthly)}/mo. Lenders check you could still afford this.
+                  </div>
+                </Card>
+              </div>
+              <Card title="Affordability Check" subtitle="Optional — enter your household income to sanity-check the loan size" theme={theme}>
+                <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 5 }}>Gross annual household income</label>
+                    <MoneyInput value={income} onChange={setIncome} placeholder="e.g. 85,000" theme={theme} />
+                  </div>
+                  {income > 0 && (
+                    <div style={{ flex: 1, minWidth: 200, padding: "11px 14px", borderRadius: 9, background: lti <= LTI_CAP ? (d ? "rgba(22,163,74,0.07)" : "rgba(110,201,154,0.08)") : (d ? "rgba(220,38,38,0.06)" : "rgba(224,123,106,0.08)"), border: `1px solid ${lti <= LTI_CAP ? "rgba(110,201,154,0.25)" : "rgba(224,123,106,0.25)"}` }}>
+                      <div style={{ fontSize: 11, color: muted, marginBottom: 2 }}>Loan-to-income</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Georgia', serif", color: lti <= LTI_CAP ? green : red }}>{lti.toFixed(1)}×</div>
+                      <div style={{ fontSize: 10, color: muted, marginTop: 2 }}>{lti <= LTI_CAP ? `Within the typical ~${LTI_CAP}× lender ceiling` : `Above the typical ~${LTI_CAP}× ceiling — most lenders would cap your loan at ${fmt(income * LTI_CAP)}`}</div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </React.Fragment>)}
+
+            {/* ── STAMP DUTY ── */}
+            {tab === "stampduty" && (<React.Fragment>
+              <Card title="Stamp Duty Land Tax" subtitle="England & NI · Post 1 April 2025 · HMRC rates" theme={theme}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Buyer type — set from your journey, adjustable here</div>
+                  <PillToggle options={[{ value: "standard", label: "Standard" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional (+5%)" }]} value={buyerType} onChange={setBuyerType} theme={theme} />
+                </div>
+                <SliderInput label="Property Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} theme={theme} />
+              </Card>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 13 }}>
+                <Card title="Your Band Breakdown" accent="#7eb8b0" theme={theme}>
+                  {sdlt.bands.length === 0 && <div style={{ fontSize: 12, color: muted, padding: "8px 0" }}>No stamp duty due at this price.</div>}
+                  {sdlt.bands.map((b, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${border}` }}>
+                      <span style={{ fontSize: 11, color: muted, width: 150, flexShrink: 0 }}>{b.label}</span>
+                      <div style={{ flex: 1, height: 4, background: d ? "#e0ddd8" : "#2a2a38", borderRadius: 2 }}>
+                        <div style={{ height: "100%", width: `${sdlt.total > 0 ? Math.min(100, b.tax / sdlt.total * 100) : 0}%`, background: "#7eb8b0", borderRadius: 2 }} />
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "#7eb8b0", width: 30, textAlign: "right" }}>{b.rate}%</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: text, width: 70, textAlign: "right" }}>{fmt(b.tax)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "11px 0 0", borderTop: `1px solid ${border}`, marginTop: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: 12, color: text }}>Total SDLT</span>
+                    <span style={{ fontWeight: 700, fontSize: 16, color: "#c9a96e", fontFamily: "'Georgia', serif" }}>{fmt(sdlt.total)}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: muted, marginTop: 8 }}>Effective rate: {offerPrice > 0 ? fmtPct(sdlt.total / offerPrice * 100) : "0%"} of purchase price · Due within 14 days of completion</div>
+                </Card>
+                <Card title="Rate Tables" theme={theme}>
+                  <div style={{ fontSize: 10, color: muted, marginBottom: 8 }}>Standard residential</div>
+                  {[["£0 – £125,000","0%"],["£125,001 – £250,000","2%"],["£250,001 – £925,000","5%"],["£925,001 – £1,500,000","10%"],["Above £1,500,000","12%"]].map(([b,r]) => (
+                    <div key={b} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${border}`, fontSize: 11 }}>
+                      <span style={{ color: muted }}>{b}</span><span style={{ fontWeight: 600, color: "#7eb8b0" }}>{r}</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 8, background: d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: muted, lineHeight: 1.7 }}>
+                    <strong style={{ color: "#c9a96e" }}>First-time buyers:</strong> 0% to £300k, 5% on £300k–£500k. No relief above £500k.<br />
+                    <strong style={{ color: "#c9a96e" }}>Additional property:</strong> +5% surcharge on every band.
+                  </div>
+                </Card>
+              </div>
+            </React.Fragment>)}
+
+            {/* ── SCENARIOS ── */}
+            {tab === "scenario" && (<React.Fragment>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontFamily: "'Georgia', serif", fontSize: 14, color: text }}>Stress-test your position</div>
+                  <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>Move the levers — your base case stays untouched</div>
+                </div>
+                <button onClick={() => setScen({ offerPrice, salePrice, depositPct, rate: mortgageRate })} style={{ fontSize: 11, color: muted, background: "none", border: `1px solid ${border}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit" }}>Reset to base</button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 10 }}>
+                <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Offer Price</div>
+                  <SliderInput value={scen.offerPrice} onChange={v => setScen(p => ({ ...p, offerPrice: v }))} min={Math.max(50000, offerPrice - 250000)} max={offerPrice + 300000} step={5000} theme={theme} />
+                  <div style={{ fontSize: 11, color: muted }}>Deposit {fmt(sDeposit)} · SDLT {fmt(sSDLT.total)}</div>
+                </div>
+                {hasSale && (
+                  <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Sale Price</div>
+                    <SliderInput value={scen.salePrice} onChange={v => setScen(p => ({ ...p, salePrice: v }))} min={Math.max(50000, salePrice - 200000)} max={salePrice + 200000} step={5000} theme={theme} />
+                    <div style={{ fontSize: 11, color: muted }}>Net proceeds {fmt(sNetSale)}</div>
+                  </div>
+                )}
+                <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Deposit %</div>
+                  <SliderInput value={scen.depositPct} onChange={v => setScen(p => ({ ...p, depositPct: v }))} min={5} max={60} step={1} prefix="" suffix="%" theme={theme} />
+                  <div style={{ fontSize: 11, color: muted }}>{fmt(sDeposit)} · LTV {fmtPct(100 - scen.depositPct)}</div>
+                </div>
+                <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Mortgage Rate</div>
+                  <SliderInput value={scen.rate} onChange={v => setScen(p => ({ ...p, rate: v }))} min={1} max={10} step={0.05} prefix="" suffix="%" theme={theme} />
+                  <div style={{ fontSize: 11, color: muted }}>{fmt(sMortgage.monthly)}/mo</div>
+                </div>
+              </div>
+
+              <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "11px 15px", borderBottom: `1px solid ${border}`, fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.5px" }}>What this means for you</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
+                  {[
+                    { label: "Base Case", val: surplus, sub: fmt(mortgage.monthly) + "/mo" },
+                    { label: "Your Scenario", val: sSurplus, sub: fmt(sMortgage.monthly) + "/mo", hl: true },
+                    { label: "Change", val: sSurplus - surplus, sub: (sMortgage.monthly > mortgage.monthly ? "+" : "") + fmt(sMortgage.monthly - mortgage.monthly) + "/mo" },
+                  ].map(({ label, val, sub, hl }) => (
+                    <div key={label} style={{ padding: "16px 14px", textAlign: "center", background: hl ? (d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.05)") : "transparent", borderRight: `1px solid ${border}` }}>
+                      <div style={{ fontSize: 10, color: hl ? "#c9a96e" : muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 7 }}>{label}</div>
+                      <div style={{ fontSize: 22, fontFamily: "'Georgia', serif", fontWeight: 700, color: val >= 0 ? green : red }}>{val >= 0 ? "+" : ""}{fmt(val)}</div>
+                      <div style={{ fontSize: 10, color: muted, marginTop: 4 }}>{sub}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: "10px 15px" }}>
+                  {[
+                    { label: "Total Cash Needed", base: totalCashNeeded, s: sNeeded, lb: true },
+                    { label: "Total Cash Available", base: cashAvailable, s: sAvailable, lb: false },
+                    { label: "Deposit", base: depositAmount, s: sDeposit, lb: true },
+                    { label: "Stamp Duty", base: sdlt.total, s: sSDLT.total, lb: true },
+                    { label: "Monthly Mortgage", base: mortgage.monthly, s: sMortgage.monthly, lb: true },
+                  ].map(({ label, base, s, lb }) => {
+                    const diff = s - base;
+                    const good = lb ? diff <= 0 : diff >= 0;
+                    const c = diff === 0 ? muted : good ? green : red;
+                    return (
+                      <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${border}` }}>
+                        <span style={{ fontSize: 12, color: muted }}>{label}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                          <span style={{ fontSize: 11, color: muted }}>{fmt(base)}</span>
+                          <span style={{ fontSize: 11, color: muted }}>→</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: text }}>{fmt(s)}</span>
+                          <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: c + "22", color: c }}>{diff === 0 ? "No change" : (diff > 0 ? "+" : "") + fmt(diff)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </React.Fragment>)}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-
-    const container = document.getElementById('root');
-    const root = ReactDOM.createRoot(container);
-    root.render(React.createElement(App));
+const container = document.getElementById('root');
+const root = ReactDOM.createRoot(container);
+root.render(React.createElement(App));
   </script>
 </body>
 </html>
