@@ -4,875 +4,1482 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ChainReady — Property Transaction Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Poiret+One&display=swap" rel="stylesheet" />
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
-    body { font-family: 'Outfit', sans-serif; background: #0f0f13; }
-    #root { min-height: 100vh; }
-    input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #c9a96e; cursor: pointer; border: 2px solid #0f0f13; }
-    input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #c9a96e; cursor: pointer; border: 2px solid #0f0f13; }
+    :root {
+      --bg: #0c1814;
+      --bg-grad-1: #0e1c17;
+      --surface: #142822;
+      --surface-2: #1a322b;
+      --line: rgba(232,226,208,0.10);
+      --line-2: rgba(232,226,208,0.16);
+      --gold: #c8a24a;
+      --gold-light: #ddc080;
+      --gold-deep: #9c7b2f;
+      --cream: #e8e2d0;
+      --ink: #ece7d6;
+      --muted: rgba(236,231,214,0.56);
+      --faint: rgba(236,231,214,0.34);
+      --sage: #7fae9e;
+      --sage-deep: #527e70;
+      --clay: #c98a5e;
+      --pos: #84c9a5;
+      --neg: #e29c81;
+      --radius: 3px;
+    }
+    body {
+      background:
+        radial-gradient(1200px 700px at 50% -10%, var(--bg-grad-1) 0%, var(--bg) 55%);
+      color: var(--ink);
+      font-family: 'Jost', system-ui, sans-serif;
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+    em { font-style: normal; color: var(--gold); }
+    input:focus, button:focus { outline: none; }
     input[type=number] { -moz-appearance: textfield; }
     input[type=number]::-webkit-outer-spin-button,
-    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
-    input:focus, button:focus { outline: none; }
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+    /* ─── DISPLAY TYPE — direction-driven ─── */
+    #cr-root[data-direction="savoy"]    { --font-display: 'Poiret One', 'Jost', sans-serif; --disp-spacing: 0.5px; --disp-weight: 400; --disp-transform: none; }
+    #cr-root[data-direction="monogram"] { --font-display: 'Jost', sans-serif; --disp-spacing: 3px; --disp-weight: 600; --disp-transform: uppercase; }
+
+    .cr-app { max-width: 1040px; margin: 0 auto; padding-bottom: 64px; }
+
+    /* ─── HEADER ─── */
+    .cr-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 28px 18px; border-bottom: 1px solid var(--line);
+      position: relative;
+    }
+    .cr-header::after {
+      content: ""; position: absolute; left: 28px; right: 28px; bottom: -4px;
+      height: 1px; background: linear-gradient(90deg, transparent, var(--gold-deep) 20%, var(--gold-deep) 80%, transparent);
+      opacity: 0.4;
+    }
+    #cr-root[data-ornaments="off"] .cr-header::after { display: none; }
+    .cr-brand-wrap { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    .cr-brand {
+      font-family: var(--font-display); font-weight: var(--disp-weight);
+      font-size: 22px; letter-spacing: 4px; text-transform: uppercase; color: var(--cream);
+    }
+    .cr-badge {
+      font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold);
+      border: 1px solid var(--gold-deep); padding: 4px 11px; border-radius: 40px;
+      background: none; cursor: pointer; font-family: 'Jost', sans-serif;
+    }
+    .cr-badge:hover { background: rgba(200,162,74,0.1); }
+    .cr-header-right { display: flex; align-items: center; gap: 14px; }
+    .cr-export { display: flex; align-items: center; gap: 6px; }
+
+    /* ─── BUTTONS / LINKS ─── */
+    .cr-link {
+      background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer;
+      font-family: 'Jost', sans-serif; letter-spacing: 0.3px; transition: color 0.18s; white-space: nowrap;
+    }
+    .cr-link:hover { color: var(--gold); }
+    .cr-btn-gold {
+      background: var(--gold); color: #14110a; border: none; cursor: pointer;
+      font-family: 'Jost', sans-serif; font-weight: 500; font-size: 13px; letter-spacing: 1px;
+      text-transform: uppercase; padding: 13px 22px; border-radius: var(--radius);
+      transition: transform 0.16s, box-shadow 0.16s, opacity 0.16s;
+    }
+    .cr-btn-gold:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 8px 26px rgba(200,162,74,0.28); }
+    .cr-btn-block { width: 100%; margin-top: 8px; }
+
+    /* ─── STAGES ─── */
+    .cr-stage { padding: 44px 28px 60px; }
+    .cr-step-tag {
+      display: block; font-size: 10px; letter-spacing: 4px; text-transform: uppercase;
+      color: var(--gold); margin-bottom: 14px;
+    }
+    .cr-journey { max-width: 560px; margin: 0 auto; text-align: center; }
+    .cr-display-h1 {
+      font-family: var(--font-display); font-weight: var(--disp-weight);
+      letter-spacing: var(--disp-spacing); text-transform: var(--disp-transform);
+      font-size: clamp(30px, 5vw, 46px); line-height: 1.15; color: var(--cream); margin-bottom: 12px;
+    }
+    .cr-lede { font-size: 14px; color: var(--muted); line-height: 1.75; max-width: 400px; margin: 0 auto 34px; }
+    .cr-journey-list { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+    .cr-journey-card {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 20px 24px; background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius); cursor: pointer; font-family: 'Jost', sans-serif;
+      transition: border-color 0.2s, transform 0.15s, background 0.2s; position: relative;
+    }
+    .cr-journey-card::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      background: var(--gold); transform: scaleY(0); transform-origin: top; transition: transform 0.22s;
+    }
+    .cr-journey-card:hover { border-color: var(--gold-deep); transform: translateY(-2px); background: var(--surface-2); }
+    .cr-journey-card:hover::before { transform: scaleY(1); }
+    .cr-journey-title { font-size: 16px; font-weight: 500; color: var(--cream); margin-bottom: 5px; }
+    .cr-journey-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+    .cr-journey-arrow { color: var(--gold); font-size: 18px; flex-shrink: 0; }
+
+    /* ─── DETAILS FORM ─── */
+    .cr-details { display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; justify-content: center; max-width: 820px; margin: 0 auto; }
+    .cr-guide { width: 300px; flex-shrink: 0; }
+    .cr-guide-h { font-family: var(--font-display); font-weight: var(--disp-weight); letter-spacing: var(--disp-spacing); text-transform: var(--disp-transform); font-size: 26px; line-height: 1.25; color: var(--cream); margin-bottom: 8px; }
+    .cr-guide-p { font-size: 13px; color: var(--muted); line-height: 1.75; margin-bottom: 26px; }
+    .cr-steps { display: flex; flex-direction: column; gap: 16px; }
+    .cr-step { display: flex; gap: 13px; align-items: flex-start; }
+    .cr-step-num {
+      width: 30px; height: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--gold-deep); color: var(--gold); font-family: var(--font-display);
+      font-size: 12px; letter-spacing: 1px; border-radius: 50%;
+    }
+    #cr-root[data-direction="monogram"] .cr-step-num { border-radius: 0; }
+    .cr-step-t { font-size: 13px; font-weight: 500; color: var(--cream); margin-bottom: 2px; }
+    .cr-step-b { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .cr-note {
+      padding: 12px 15px; border-radius: var(--radius); background: rgba(200,162,74,0.06);
+      border: 1px solid rgba(200,162,74,0.2); font-size: 11.5px; color: var(--muted); line-height: 1.65;
+    }
+    .cr-note strong { color: var(--gold); font-weight: 500; }
+    .cr-note-wide { margin-top: 4px; }
+    .cr-form {
+      width: 420px; max-width: 100%; background: var(--surface); border: 1px solid var(--line-2);
+      border-radius: var(--radius); padding: 30px 28px; position: relative;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    .cr-form::before, .cr-form::after {
+      content: ""; position: absolute; width: 14px; height: 14px; border: 1px solid var(--gold-deep);
+    }
+    .cr-form::before { top: 8px; left: 8px; border-right: none; border-bottom: none; }
+    .cr-form::after  { bottom: 8px; right: 8px; border-left: none; border-top: none; }
+    #cr-root[data-ornaments="off"] .cr-form::before,
+    #cr-root[data-ornaments="off"] .cr-form::after { display: none; }
+    .cr-form-head { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; margin-bottom: 4px; }
+    .cr-form-head > .cr-form-title { flex: 1; min-width: 0; }
+    .cr-form-title { font-family: var(--font-display); font-weight: var(--disp-weight); letter-spacing: var(--disp-spacing); text-transform: var(--disp-transform); font-size: 18px; color: var(--cream); line-height: 1.25; }
+    .cr-form-sub { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
+
+    /* ─── INPUTS ─── */
+    .cr-field-label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 10px; font-weight: 500; letter-spacing: 1.2px; text-transform: uppercase;
+      color: var(--faint); margin-bottom: 6px;
+    }
+    .cr-field-label.cr-err { color: var(--neg); }
+    .cr-opt { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 5px; color: var(--faint); }
+    .cr-err-tag { font-size: 9px; color: var(--neg); }
+    .cr-input {
+      width: 100%; padding: 11px 14px; background: var(--bg);
+      border: 1px solid var(--line-2); border-radius: var(--radius);
+      font-size: 14px; color: var(--ink); font-family: 'Jost', sans-serif; transition: border-color 0.18s, background 0.18s;
+    }
+    .cr-input:focus { border-color: var(--gold); background: rgba(200,162,74,0.04); }
+    .cr-input-err { border-color: var(--neg); }
+    .cr-money-sym { position: absolute; left: 13px; font-size: 14px; color: var(--faint); pointer-events: none; }
+    .cr-money-suffix { position: absolute; right: 14px; font-size: 12px; color: var(--faint); pointer-events: none; }
+    .cr-hint { font-size: 11px; color: var(--faint); margin-top: 5px; line-height: 1.5; }
+
+    /* ─── SLIDER ─── */
+    .cr-slider-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    .cr-slider-val { font-family: var(--font-display); font-size: 15px; color: var(--cream); letter-spacing: 0.5px; }
+    .cr-track { position: relative; height: 4px; background: var(--line-2); border-radius: 2px; margin: 8px 0 4px; }
+    .cr-track-fill { position: absolute; height: 100%; background: var(--gold); border-radius: 2px; pointer-events: none; }
+    .cr-range { position: absolute; top: 50%; left: 0; width: 100%; height: 4px; transform: translateY(-50%); background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+    .cr-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--gold); border: 2px solid var(--bg); cursor: pointer; transform: rotate(45deg); }
+    .cr-range::-moz-range-thumb { width: 14px; height: 14px; background: var(--gold); border: 2px solid var(--bg); cursor: pointer; border-radius: 0; }
+    #cr-root[data-direction="savoy"] .cr-range::-webkit-slider-thumb { border-radius: 50%; transform: none; }
+    #cr-root[data-direction="savoy"] .cr-range::-moz-range-thumb { border-radius: 50%; }
+    .cr-track-ends { display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); }
+
+    /* ─── PILLS / TOGGLE ─── */
+    .cr-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cr-pill {
+      padding: 6px 13px; border-radius: 40px; font-size: 11px; font-weight: 400; cursor: pointer;
+      border: 1px solid var(--line-2); background: var(--bg); color: var(--muted); font-family: 'Jost', sans-serif; transition: all 0.16s;
+    }
+    .cr-pill-on { border-color: var(--gold); background: var(--gold); color: #14110a; font-weight: 500; }
+    .cr-toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+    .cr-switch { width: 34px; height: 18px; border-radius: 10px; background: var(--line-2); border: none; cursor: pointer; position: relative; transition: background 0.2s; }
+    .cr-switch span { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: var(--cream); top: 3px; left: 3px; transition: left 0.2s; }
+    .cr-switch-on { background: var(--gold); }
+    .cr-switch-on span { left: 19px; }
+
+    /* ─── DASHBOARD ─── */
+    .cr-tabs {
+      display: flex; overflow-x: auto; border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; z-index: 40; background: var(--bg);
+      padding: 0 16px;
+    }
+    .cr-tab {
+      padding: 13px 16px; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+      color: var(--muted); border: none; background: none; cursor: pointer; white-space: nowrap;
+      font-family: 'Jost', sans-serif; border-bottom: 2px solid transparent; transition: color 0.16s;
+    }
+    .cr-tab:hover { color: var(--cream); }
+    .cr-tab-on { color: var(--gold); border-bottom-color: var(--gold); }
+    .cr-content { padding: 22px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ─── VERDICT ─── */
+    .cr-verdict { border-radius: var(--radius); padding: 16px 20px; border: 1px solid; }
+    .cr-verdict-ok { background: rgba(132,201,165,0.08); border-color: rgba(132,201,165,0.3); }
+    .cr-verdict-warn { background: rgba(226,156,129,0.08); border-color: rgba(226,156,129,0.3); }
+    .cr-verdict-main { font-size: 14px; font-weight: 500; }
+    .cr-verdict-ok .cr-verdict-main { color: var(--pos); }
+    .cr-verdict-warn .cr-verdict-main { color: var(--neg); }
+    .cr-verdict-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+    /* ─── TILES ─── */
+    .cr-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .cr-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 15px; position: relative; overflow: hidden; }
+    .cr-tile-accent { border-color: rgba(200,162,74,0.35); }
+    .cr-tile-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+    .cr-tile-val { font-family: var(--font-display); font-weight: var(--disp-weight); font-size: 22px; letter-spacing: 0.5px; color: var(--ink); line-height: 1.1; white-space: nowrap; }
+    .cr-tile-accent .cr-tile-val { color: var(--gold); }
+    .cr-tile-pos .cr-tile-val { color: var(--pos); }
+    .cr-tile-neg .cr-tile-val { color: var(--neg); }
+    .cr-tile-sub { font-size: 10.5px; color: var(--muted); margin-top: 5px; }
+
+    /* ─── CARD ─── */
+    .cr-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+    .cr-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .cr-card-accent { border-top: 2px solid var(--card-accent, var(--gold)); }
+    .cr-card-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+      padding: 16px 18px 12px; border-bottom: 1px solid var(--line);
+    }
+    .cr-card-head > div:first-child { flex: 1; min-width: 0; }
+    .cr-card-title { font-family: var(--font-display); font-weight: var(--disp-weight); letter-spacing: var(--disp-spacing); text-transform: var(--disp-transform); font-size: 15px; color: var(--cream); line-height: 1.3; }
+    #cr-root[data-direction="monogram"] .cr-card-title { font-size: 13px; }
+    .cr-card-sub { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.45; }
+    .cr-card-body { padding: 16px 18px; }
+
+    /* ─── ORNAMENTS ─── */
+    #cr-root[data-ornaments="off"] .cr-fan,
+    #cr-root[data-ornaments="off"] .cr-diamond { display: none; }
+    .cr-fan { flex-shrink: 0; opacity: 0.9; }
+    #cr-root[data-direction="monogram"] .cr-fan { display: none; }
+
+    /* ─── ROWS ─── */
+    .cr-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .cr-row:last-child { border-bottom: none; }
+    .cr-row-hl { background: rgba(200,162,74,0.07); margin: 4px -18px 0; padding: 11px 18px; border-bottom: none; border-top: 1px solid var(--line); }
+    .cr-row-label { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+    .cr-row-hl .cr-row-label { color: var(--cream); font-weight: 500; }
+    .cr-row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+    .cr-row-sub { font-size: 10px; color: var(--faint); line-height: 1.3; }
+    .cr-row-val { font-size: 13px; font-weight: 500; color: var(--ink); line-height: 1.3; white-space: nowrap; }
+    .cr-row-hl .cr-row-val { font-family: var(--font-display); font-size: 15px; color: var(--gold); }
+    .cr-accent { color: var(--gold) !important; }
+    .cr-pos { color: var(--pos) !important; }
+    .cr-neg { color: var(--neg) !important; }
+    .cr-sage { color: var(--sage) !important; }
+    .cr-muted { color: var(--muted) !important; }
+
+    /* ─── DONUT ─── */
+    .cr-donut-layout { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+    .cr-donut-wrap { position: relative; flex-shrink: 0; margin: 0 auto; }
+    .cr-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .cr-donut-c-label { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); }
+    .cr-donut-c-val { font-family: var(--font-display); font-weight: var(--disp-weight); font-size: 20px; color: var(--gold); margin-top: 2px; }
+    .cr-legend { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 4px; }
+    .cr-legend-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+    .cr-legend-dot { width: 9px; height: 9px; flex-shrink: 0; }
+    #cr-root[data-direction="savoy"] .cr-legend-dot { border-radius: 50%; }
+    .cr-legend-label { font-size: 11.5px; color: var(--muted); flex: 1; }
+    .cr-legend-pct { font-size: 10px; color: var(--faint); width: 32px; text-align: right; }
+    .cr-legend-val { font-size: 11.5px; color: var(--ink); width: 64px; text-align: right; font-weight: 500; }
+
+    /* ─── MISC DASHBOARD BITS ─── */
+    .cr-alert { border-radius: var(--radius); padding: 11px 15px; background: rgba(226,156,129,0.07); border: 1px solid rgba(226,156,129,0.25); font-size: 12px; color: var(--neg); }
+    .cr-edit-link { align-self: flex-start; border: 1px solid var(--line-2); border-radius: var(--radius); padding: 6px 13px; }
+    .cr-bar { height: 6px; border-radius: 3px; background: var(--line-2); overflow: hidden; margin-top: 4px; }
+    .cr-bar-fill { height: 100%; background: linear-gradient(90deg, var(--gold), var(--sage)); }
+    .cr-bignum { text-align: center; padding: 14px 0 16px; }
+    .cr-bignum-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+    .cr-bignum-val { font-family: var(--font-display); font-weight: var(--disp-weight); font-size: 38px; color: var(--gold); line-height: 1; letter-spacing: 0.5px; }
+    .cr-afford { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+    .cr-lti { flex: 1; min-width: 200px; padding: 12px 15px; border-radius: var(--radius); border: 1px solid; }
+    .cr-lti-ok { background: rgba(132,201,165,0.07); border-color: rgba(132,201,165,0.25); }
+    .cr-lti-warn { background: rgba(226,156,129,0.07); border-color: rgba(226,156,129,0.25); }
+    .cr-lti-val { font-family: var(--font-display); font-weight: var(--disp-weight); font-size: 20px; margin: 2px 0; }
+    .cr-lti-ok .cr-lti-val { color: var(--pos); }
+    .cr-lti-warn .cr-lti-val { color: var(--neg); }
+
+    /* ─── STAMP DUTY BANDS ─── */
+    .cr-band { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .cr-band-label { font-size: 11px; color: var(--muted); width: 148px; flex-shrink: 0; }
+    .cr-band-bar { flex: 1; height: 4px; background: var(--line-2); border-radius: 2px; }
+    .cr-band-fill { height: 100%; background: var(--sage); border-radius: 2px; }
+    .cr-band-rate { font-size: 11px; font-weight: 500; color: var(--sage); width: 30px; text-align: right; }
+    .cr-band-tax { font-size: 11px; font-weight: 500; color: var(--ink); width: 68px; text-align: right; }
+
+    /* ─── SCENARIOS ─── */
+    .cr-scen-head { display: flex; justify-content: space-between; align-items: center; }
+    .cr-reset { border: 1px solid var(--line-2); border-radius: var(--radius); padding: 5px 11px; }
+    .cr-scen-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 12px; }
+    .cr-scen-lever { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px; }
+    .cr-lever-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+    .cr-scen-summary-head { padding: 13px 18px; border-bottom: 1px solid var(--line); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); }
+    .cr-scen-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+    .cr-scen-col { padding: 18px 14px; text-align: center; border-right: 1px solid var(--line); }
+    .cr-scen-col:last-child { border-right: none; }
+    .cr-scen-col-hl { background: rgba(200,162,74,0.06); }
+    .cr-scen-col-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--faint); margin-bottom: 7px; }
+    .cr-scen-col-hl .cr-scen-col-label { color: var(--gold); }
+    .cr-scen-col-val { font-family: var(--font-display); font-weight: var(--disp-weight); font-size: 24px; }
+    .cr-scen-delta { display: flex; align-items: center; gap: 9px; }
+    .cr-chip { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 40px; background: rgba(236,231,214,0.1); }
+    .cr-chip.cr-pos { background: rgba(132,201,165,0.15); }
+    .cr-chip.cr-neg { background: rgba(226,156,129,0.15); }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 680px) {
+      .cr-header { padding: 16px 18px; }
+      .cr-content { padding: 18px 16px; }
+      .cr-stage { padding: 32px 18px 48px; }
+      .cr-details { gap: 28px; }
+      .cr-guide { width: 100%; }
+      .cr-scen-3col { grid-template-columns: 1fr; }
+      .cr-scen-col { border-right: none; border-bottom: 1px solid var(--line); }
+      .cr-band-label { width: 110px; }
+    }
   </style>
 </head>
 <body>
-  <div id="root"></div>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.23.3/babel.min.js"></script>
+  <div id="cr-root" data-direction="savoy" data-ornaments="on">
+    <div id="root"></div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
   <script type="text/babel" data-presets="react">
-    const { useState, useMemo } = React;
+    // ─── TWEAKS PANEL ────────────────────────────────────────────────────────────
+    const __TWEAKS_STYLE = `
+      .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+        max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+        transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+        background:rgba(250,249,247,.78);color:#29261b;
+        -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+        border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+        box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+        font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+      .twk-hd{display:flex;align-items:center;justify-content:space-between;
+        padding:10px 8px 10px 14px;cursor:move;user-select:none}
+      .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+      .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+        width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+      .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+      .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+        overflow-y:auto;overflow-x:hidden;min-height:0;
+        scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+      .twk-body::-webkit-scrollbar{width:8px}
+      .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+      .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+        border:2px solid transparent;background-clip:content-box}
+      .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+        border:2px solid transparent;background-clip:content-box}
+      .twk-row{display:flex;flex-direction:column;gap:5px}
+      .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+      .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+        color:rgba(41,38,27,.72)}
+      .twk-lbl>span:first-child{font-weight:500}
+      .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+      .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+        color:rgba(41,38,27,.45);padding:10px 0 0}
+      .twk-sect:first-child{padding-top:0}
+      .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
+        border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+        background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+      .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+      select.twk-field{padding-right:22px;
+        background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+        background-repeat:no-repeat;background-position:right 8px center}
+      .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+        border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+      .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+        width:14px;height:14px;border-radius:50%;background:#fff;
+        border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+      .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+        background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+      .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+        background:rgba(0,0,0,.06);user-select:none}
+      .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+        background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+        transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+      .twk-seg.dragging .twk-seg-thumb{transition:none}
+      .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+        background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+        border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;overflow-wrap:anywhere}
+      .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+        background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+      .twk-toggle[data-on="1"]{background:#34c759}
+      .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+        background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+      .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+      .twk-chips{display:flex;gap:6px}
+      .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+        padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+        box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+        transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+      .twk-chip:hover{transform:translateY(-1px);
+        box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+      .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),0 2px 6px rgba(0,0,0,.15)}
+      .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+        display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+      .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+      .twk-chip>span>i:first-child{box-shadow:none}
+      .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+        filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+    `;
 
-// ─── CONSTANTS ────────────────────────────────────────────────────────────────
-// Best 5yr fixed, May 2026 (source: HomeOwners Alliance / L&C). Update periodically.
-const MARKET_RATE = 4.35;
-const STRESS_DELTA = 3; // lender stress test margin
-const LTI_CAP = 4.5;    // typical loan-to-income ceiling
-
-// ─── CALCULATIONS ─────────────────────────────────────────────────────────────
-function calcSDLT(price, buyerType) {
-  if (price <= 0) return { total: 0, bands: [] };
-  let bands = [], type = buyerType;
-  if (type === "firstTime") {
-    if (price > 500000) { type = "standard"; }
-    else {
-      const b2 = Math.max(0, Math.min(price, 500000) - 300000);
-      return { total: b2 * 0.05, bands: [
-        { label: "£0 – £300,000", rate: 0, tax: 0 },
-        ...(b2 > 0 ? [{ label: "£300,001 – £500,000", rate: 5, tax: b2 * 0.05 }] : [])
-      ]};
+    function useTweaks(defaults) {
+      const [values, setValues] = React.useState(defaults);
+      const setTweak = React.useCallback((keyOrEdits, val) => {
+        const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+          ? keyOrEdits : { [keyOrEdits]: val };
+        setValues((prev) => ({ ...prev, ...edits }));
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+        window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
+      }, []);
+      return [values, setTweak];
     }
-  }
-  if (type === "standard") {
-    const T = [{ limit: 125000, rate: 0 },{ limit: 250000, rate: 2 },{ limit: 925000, rate: 5 },{ limit: 1500000, rate: 10 },{ limit: Infinity, rate: 12 }];
-    const L = ["£0 – £125,000","£125,001 – £250,000","£250,001 – £925,000","£925,001 – £1,500,000","Above £1,500,000"];
-    let prev = 0;
-    T.forEach(({ limit, rate }, i) => { if (price > prev) { const t = Math.min(price, limit) - prev; if (t > 0) bands.push({ label: L[i], rate, tax: t * rate / 100 }); prev = limit; } });
-    return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
-  }
-  if (type === "additional") {
-    const T = [{ limit: 125000, r: 5 },{ limit: 250000, r: 7 },{ limit: 925000, r: 10 },{ limit: 1500000, r: 15 },{ limit: Infinity, r: 17 }];
-    const L = ["£0 – £125,000","£125,001 – £250,000","£250,001 – £925,000","£925,001 – £1,500,000","Above £1,500,000"];
-    let prev = 0;
-    T.forEach(({ limit, r }, i) => { if (price > prev) { const t = Math.min(price, limit) - prev; if (t > 0) bands.push({ label: L[i], rate: r, tax: t * r / 100 }); prev = limit; } });
-    return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
-  }
-  return { total: 0, bands: [] };
-}
 
-function calcMortgage(principal, annualRate, years) {
-  if (!principal || principal <= 0 || !years) return { monthly: 0, total: 0, interest: 0 };
-  const r = annualRate / 100 / 12, n = years * 12;
-  if (r === 0) return { monthly: principal / n, total: principal, interest: 0 };
-  const monthly = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-  return { monthly, total: monthly * n, interest: monthly * n - principal };
-}
+    function TweaksPanel({ title = 'Tweaks', children }) {
+      const [open, setOpen] = React.useState(false);
+      const dragRef = React.useRef(null);
+      const offsetRef = React.useRef({ x: 16, y: 16 });
+      const PAD = 16;
 
-function fmt(n) {
-  if (n === undefined || n === null || isNaN(n)) return "£0";
-  const abs = Math.abs(Math.round(n));
-  return (n < 0 ? "-£" : "£") + abs.toLocaleString("en-GB");
-}
-function fmtPct(n) { return (Math.round(n * 100) / 100) + "%"; }
+      const clampToViewport = React.useCallback(() => {
+        const panel = dragRef.current;
+        if (!panel) return;
+        const w = panel.offsetWidth, h = panel.offsetHeight;
+        const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+        const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+        offsetRef.current = {
+          x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+          y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+        };
+        panel.style.right = offsetRef.current.x + 'px';
+        panel.style.bottom = offsetRef.current.y + 'px';
+      }, []);
 
-// ─── JOURNEYS ─────────────────────────────────────────────────────────────────
-const JOURNEYS = {
-  ftb: {
-    label: "My first home",
-    desc: "Buying for the first time — no property to sell, first-time buyer stamp duty relief.",
-    badge: "First-Time Buyer",
-    buyerType: "firstTime",
-    hasSale: false,
-  },
-  mover: {
-    label: "Moving home",
-    desc: "Selling my current property and buying the next one — the classic chain.",
-    badge: "Home Mover",
-    buyerType: "standard",
-    hasSale: true,
-  },
-  additional: {
-    label: "An additional property",
-    desc: "Buying while keeping my current property — second home or buy-to-let. +5% stamp duty applies.",
-    badge: "Additional Property",
-    buyerType: "additional",
-    hasSale: false,
-  },
-};
+      React.useEffect(() => {
+        if (!open) return;
+        clampToViewport();
+        if (typeof ResizeObserver === 'undefined') {
+          window.addEventListener('resize', clampToViewport);
+          return () => window.removeEventListener('resize', clampToViewport);
+        }
+        const ro = new ResizeObserver(clampToViewport);
+        ro.observe(document.documentElement);
+        return () => ro.disconnect();
+      }, [open, clampToViewport]);
 
-// ─── SHARED UI ────────────────────────────────────────────────────────────────
-function MoneyInput({ value, onChange, placeholder, theme, error, suffix }) {
-  const d = theme === "light";
-  const display = value === "" || value === 0 ? "" : Number(value).toLocaleString("en-GB");
-  return (
-    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-      {!suffix && <span style={{ position: "absolute", left: 12, fontSize: 14, color: d ? "#888" : "#6a6880", pointerEvents: "none" }}>£</span>}
-      <input
-        type="text" inputMode="numeric" placeholder={placeholder} value={display}
-        onChange={e => { const raw = e.target.value.replace(/[^0-9]/g, ""); onChange(raw === "" ? "" : Number(raw)); }}
-        style={{
-          width: "100%", padding: suffix ? "11px 44px 11px 13px" : "11px 13px 11px 27px",
-          background: d ? (error ? "rgba(224,123,106,0.06)" : "#f8f7f5") : (error ? "rgba(224,123,106,0.08)" : "#1e1e28"),
-          border: `1px solid ${error ? "#e07b6a" : d ? "#ddd" : "#2a2a38"}`,
-          borderRadius: 9, fontSize: 14, color: d ? "#1a1a1a" : "#f0ede8", fontFamily: "inherit",
-        }}
-      />
-      {suffix && <span style={{ position: "absolute", right: 13, fontSize: 12, color: d ? "#888" : "#6a6880", pointerEvents: "none" }}>{suffix}</span>}
-    </div>
-  );
-}
+      React.useEffect(() => {
+        const onMsg = (e) => {
+          const t = e?.data?.type;
+          if (t === '__activate_edit_mode') setOpen(true);
+          else if (t === '__deactivate_edit_mode') setOpen(false);
+        };
+        window.addEventListener('message', onMsg);
+        window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+        return () => window.removeEventListener('message', onMsg);
+      }, []);
 
-function SliderInput({ label, value, onChange, min, max, step = 1000, prefix = "£", suffix = "", hint, theme }) {
-  const d = theme === "light";
-  const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
-  return (
-    <div style={{ marginBottom: 14 }}>
-      {label && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-        <span style={{ fontSize: 12, color: d ? "#666" : "#8a87a0" }}>{label}</span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8" }}>{prefix}{typeof value === "number" ? value.toLocaleString("en-GB") : value}{suffix}</span>
-      </div>}
-      {hint && <div style={{ fontSize: 11, color: d ? "#aaa" : "#6a6880", marginBottom: 4 }}>{hint}</div>}
-      <div style={{ position: "relative", height: 5, background: d ? "#e0ddd8" : "#2a2a38", borderRadius: 3, margin: "6px 0 3px" }}>
-        <div style={{ position: "absolute", height: "100%", width: pct + "%", background: "#c9a96e", borderRadius: 3, pointerEvents: "none" }} />
-        <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))}
-          style={{ position: "absolute", top: "50%", left: 0, width: "100%", height: 5, background: "transparent", transform: "translateY(-50%)", cursor: "pointer", WebkitAppearance: "none", appearance: "none" }} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: d ? "#aaa" : "#6a6880" }}>
-        <span>{prefix}{min.toLocaleString("en-GB")}{suffix}</span>
-        <span>{prefix}{max.toLocaleString("en-GB")}{suffix}</span>
-      </div>
-    </div>
-  );
-}
+      const dismiss = () => {
+        setOpen(false);
+        window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+      };
 
-function PillToggle({ options, value, onChange, theme }) {
-  const d = theme === "light";
-  return (
-    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-      {options.map(o => (
-        <button key={o.value} onClick={() => onChange(o.value)} style={{
-          padding: "4px 11px", borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
-          border: value === o.value ? "1px solid #c9a96e" : `1px solid ${d ? "#ddd" : "#2a2a38"}`,
-          background: value === o.value ? "#c9a96e" : d ? "#f0ede8" : "#1e1e28",
-          color: value === o.value ? "#0f0f13" : d ? "#666" : "#8a87a0",
-        }}>{o.label}</button>
-      ))}
-    </div>
-  );
-}
+      const onDragStart = (e) => {
+        const panel = dragRef.current;
+        if (!panel) return;
+        const r = panel.getBoundingClientRect();
+        const sx = e.clientX, sy = e.clientY;
+        const startRight = window.innerWidth - r.right;
+        const startBottom = window.innerHeight - r.bottom;
+        const move = (ev) => {
+          offsetRef.current = {
+            x: startRight - (ev.clientX - sx),
+            y: startBottom - (ev.clientY - sy),
+          };
+          clampToViewport();
+        };
+        const up = () => {
+          window.removeEventListener('mousemove', move);
+          window.removeEventListener('mouseup', up);
+        };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+      };
 
-function Card({ title, subtitle, children, accent, theme }) {
-  const d = theme === "light";
-  return (
-    <div style={{ background: d ? "#fff" : "#181820", border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, borderRadius: 12, overflow: "hidden", borderTop: accent ? `3px solid ${accent}` : undefined }}>
-      <div style={{ padding: "13px 15px 9px", borderBottom: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}` }}>
-        <div style={{ fontFamily: "'Georgia', serif", fontSize: 13, fontWeight: 400, color: d ? "#1a1a1a" : "#f0ede8" }}>{title}</div>
-        {subtitle && <div style={{ fontSize: 11, color: d ? "#888" : "#8a87a0", marginTop: 2 }}>{subtitle}</div>}
-      </div>
-      <div style={{ padding: "13px 15px" }}>{children}</div>
-    </div>
-  );
-}
-
-function CostRow({ label, value, sub, highlight, theme }) {
-  const d = theme === "light";
-  return (
-    <div style={{
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      padding: highlight ? "10px 15px" : "8px 0",
-      borderBottom: highlight ? "none" : `1px solid ${d ? "#f0ede8" : "#2a2a38"}`,
-      background: highlight ? (d ? "rgba(201,169,110,0.08)" : "rgba(201,169,110,0.06)") : "transparent",
-      margin: highlight ? "0 -15px" : 0,
-      borderTop: highlight ? `1px solid ${d ? "#e0ddd8" : "#2a2a38"}` : "none",
-    }}>
-      <span style={{ fontSize: 12, color: highlight ? (d ? "#1a1a1a" : "#f0ede8") : (d ? "#666" : "#8a87a0"), fontWeight: highlight ? 600 : 400 }}>{label}</span>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
-        {sub && <span style={{ fontSize: 10, color: d ? "#aaa" : "#6a6880" }}>{sub}</span>}
-        <span style={{ fontSize: highlight ? 14 : 13, fontWeight: 600, color: highlight ? "#c9a96e" : (d ? "#1a1a1a" : "#f0ede8") }}>{fmt(value)}</span>
-      </div>
-    </div>
-  );
-}
-
-// ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ theme, setTheme, onExport, showExport, journey, onChangeJourney }) {
-  const d = theme === "light";
-  const text = d ? "#1a1a1a" : "#f0ede8";
-  const muted = d ? "#888" : "#8a87a0";
-  const border = d ? "#e0ddd8" : "#2a2a38";
-  return (
-    <div style={{ background: d ? "#fff" : "#181820", borderBottom: `1px solid ${border}`, padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <a href="https://fasanya.co.uk" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>← fasanya.co.uk</a>
-        <span style={{ color: border }}>|</span>
-        <span style={{ fontFamily: "'Georgia', serif", fontSize: 15, color: text }}>ChainReady</span>
-        {journey && (
-          <button onClick={onChangeJourney} style={{ fontSize: 9, color: "#c9a96e", border: "1px solid #c9a96e", padding: "1px 8px", borderRadius: 20, letterSpacing: "0.5px", textTransform: "uppercase", background: "none", cursor: "pointer", fontFamily: "inherit" }}>
-            {JOURNEYS[journey].badge} · change
-          </button>
-        )}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        {showExport && (
-          <button onClick={onExport} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: muted, display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            PDF
-          </button>
-        )}
-        <button onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} style={{ background: d ? "#f0ede8" : "#2a2a38", border: `1px solid ${border}`, borderRadius: 20, padding: "4px 12px", cursor: "pointer", fontSize: 11, color: text, fontFamily: "inherit" }}>
-          {d ? "Dark" : "Light"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── STAGE 1: JOURNEY PICKER ──────────────────────────────────────────────────
-function JourneyPicker({ onPick, theme }) {
-  const d = theme === "light";
-  return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 20px 64px" }}>
-      <div style={{ fontSize: 10, letterSpacing: 4, textTransform: "uppercase", color: "#c9a96e", marginBottom: 14 }}>Step 1 of 2</div>
-      <h1 style={{ fontFamily: "'Georgia', serif", fontSize: "clamp(26px, 4vw, 38px)", fontWeight: 400, color: d ? "#1a1a1a" : "#f0ede8", textAlign: "center", lineHeight: 1.25, marginBottom: 8 }}>
-        What does your move<br /><em style={{ color: "#c9a96e" }}>look like?</em>
-      </h1>
-      <p style={{ fontSize: 13, color: d ? "#777" : "#8a87a0", marginBottom: 36, textAlign: "center", maxWidth: 380, lineHeight: 1.7 }}>
-        ChainReady adapts everything — questions, stamp duty, and the cash maths — to your situation.
-      </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 480 }}>
-        {Object.entries(JOURNEYS).map(([key, j]) => (
-          <button key={key} onClick={() => onPick(key)} style={{
-            textAlign: "left", padding: "18px 22px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit",
-            background: d ? "#fff" : "#181820",
-            border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`,
-            transition: "border-color 0.2s, transform 0.15s",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-          }}
-          onMouseOver={e => { e.currentTarget.style.borderColor = "#c9a96e"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-          onMouseOut={e => { e.currentTarget.style.borderColor = d ? "#e0ddd8" : "#2a2a38"; e.currentTarget.style.transform = "none"; }}>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 500, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 4 }}>{j.label}</div>
-              <div style={{ fontSize: 12, color: d ? "#888" : "#8a87a0", lineHeight: 1.55 }}>{j.desc}</div>
+      if (!open) return null;
+      return (
+        <>
+          <style>{__TWEAKS_STYLE}</style>
+          <div ref={dragRef} className="twk-panel" style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+            <div className="twk-hd" onMouseDown={onDragStart}>
+              <b>{title}</b>
+              <button className="twk-x" aria-label="Close tweaks" onMouseDown={(e) => e.stopPropagation()} onClick={dismiss}>✕</button>
             </div>
-            <span style={{ color: "#c9a96e", fontSize: 18, flexShrink: 0 }}>→</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+            <div className="twk-body">{children}</div>
+          </div>
+        </>
+      );
+    }
 
-// ─── STAGE 2: DETAILS FORM ────────────────────────────────────────────────────
-function DetailsForm({ journey, values, setValues, onBack, onComplete, theme }) {
-  const d = theme === "light";
-  const j = JOURNEYS[journey];
-  const [errors, setErrors] = useState({});
+    function TweakSection({ label }) {
+      return <div className="twk-sect">{label}</div>;
+    }
 
-  const fieldDefs = {
-    offerPrice:       { label: "Offer price on the new property", hint: "The price you plan to offer or have offered.", required: true },
-    depositPct:       { label: "Deposit", hint: "Percentage of the purchase price you'll put down.", required: true, suffix: "%" },
-    salePrice:        { label: "Expected sale price of your current property", hint: "Estimates are fine — you can refine later.", required: true },
-    existingMortgage: { label: "Mortgage outstanding on your current property", hint: "Balance left to repay. Leave blank if none.", required: false },
-    savings:          { label: j.hasSale ? "Additional savings you're bringing in" : "Savings available for this purchase", hint: j.hasSale ? "Cash on top of your sale proceeds." : "Your total cash available for deposit and costs.", required: !j.hasSale },
-  };
-
-  const order = j.hasSale
-    ? ["offerPrice", "depositPct", "salePrice", "existingMortgage", "savings"]
-    : ["offerPrice", "depositPct", "savings"];
-
-  const steps = j.hasSale ? [
-    { n: "1", t: "Enter your basics", b: "Quick estimates are fine — everything stays editable." },
-    { n: "2", t: "See your position", b: "Your cash surplus or shortfall after every cost, instantly." },
-    { n: "3", t: "Refine and stress-test", b: "Adjust fees, rates and prices. Run scenarios before you commit." },
-  ] : [
-    { n: "1", t: "Enter your basics", b: "Three numbers. Quick estimates are fine." },
-    { n: "2", t: "See your position", b: "Whether your savings cover the deposit and every buying cost." },
-    { n: "3", t: "Refine and stress-test", b: "Adjust costs and rates. Run scenarios before you offer." },
-  ];
-
-  const handleSubmit = () => {
-    const errs = {};
-    order.forEach(k => {
-      if (fieldDefs[k].required && (!values[k] || Number(values[k]) <= 0)) errs[k] = true;
-    });
-    setErrors(errs);
-    if (Object.keys(errs).length === 0) onComplete();
-  };
-
-  return (
-    <div style={{ flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px 60px", gap: 36, flexWrap: "wrap" }}>
-      {/* Guide */}
-      <div style={{ width: 290, flexShrink: 0 }}>
-        <div style={{ fontSize: 10, letterSpacing: 4, textTransform: "uppercase", color: "#c9a96e", marginBottom: 12 }}>Step 2 of 2 · {j.badge}</div>
-        <div style={{ fontFamily: "'Georgia', serif", fontSize: 22, color: d ? "#1a1a1a" : "#f0ede8", lineHeight: 1.3, marginBottom: 6 }}>
-          Plan your move<br /><em style={{ color: "#c9a96e" }}>with clarity.</em>
+    function TweakRow({ label, value, children, inline = false }) {
+      return (
+        <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+          <div className="twk-lbl">
+            <span>{label}</span>
+            {value != null && <span className="twk-val">{value}</span>}
+          </div>
+          {children}
         </div>
-        <p style={{ fontSize: 13, color: d ? "#666" : "#8a87a0", lineHeight: 1.7, marginBottom: 26 }}>
-          {j.hasSale
-            ? "ChainReady calculates your full position across both the purchase and the sale — so you know exactly where you stand before you negotiate."
-            : "ChainReady calculates your full position — deposit, stamp duty, fees and mortgage — so you know exactly where you stand before you offer."}
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-          {steps.map(s => (
-            <div key={s.n} style={{ display: "flex", gap: 13, alignItems: "flex-start" }}>
-              <div style={{ width: 26, height: 26, borderRadius: "50%", background: "rgba(201,169,110,0.13)", border: "1px solid rgba(201,169,110,0.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 11, fontWeight: 600, color: "#c9a96e" }}>{s.n}</div>
+      );
+    }
+
+    function TweakToggle({ label, value, onChange }) {
+      return (
+        <div className="twk-row twk-row-h">
+          <div className="twk-lbl"><span>{label}</span></div>
+          <button type="button" className="twk-toggle" data-on={value ? '1' : '0'} role="switch" aria-checked={!!value} onClick={() => onChange(!value)}><i /></button>
+        </div>
+      );
+    }
+
+    function TweakRadio({ label, value, options, onChange }) {
+      const trackRef = React.useRef(null);
+      const [dragging, setDragging] = React.useState(false);
+      const valueRef = React.useRef(value);
+      valueRef.current = value;
+
+      const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+      const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+      const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+
+      if (!fitsAsSegments) {
+        return (
+          <TweakRow label={label}>
+            <select className="twk-field" value={value} onChange={(e) => {
+              const s = e.target.value;
+              const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+              onChange(m === undefined ? s : typeof m === 'object' ? m.value : m);
+            }}>
+              {options.map((o) => {
+                const v = typeof o === 'object' ? o.value : o;
+                const l = typeof o === 'object' ? o.label : o;
+                return <option key={v} value={v}>{l}</option>;
+              })}
+            </select>
+          </TweakRow>
+        );
+      }
+
+      const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+      const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+      const n = opts.length;
+
+      const segAt = (clientX) => {
+        const r = trackRef.current.getBoundingClientRect();
+        const inner = r.width - 4;
+        const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+        return opts[Math.max(0, Math.min(n - 1, i))].value;
+      };
+
+      const onPointerDown = (e) => {
+        setDragging(true);
+        const v0 = segAt(e.clientX);
+        if (v0 !== valueRef.current) onChange(v0);
+        const move = (ev) => { if (!trackRef.current) return; const v = segAt(ev.clientX); if (v !== valueRef.current) onChange(v); };
+        const up = () => { setDragging(false); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+      };
+
+      return (
+        <TweakRow label={label}>
+          <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown} className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+            <div className="twk-seg-thumb" style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`, width: `calc((100% - 4px) / ${n})` }} />
+            {opts.map((o) => (
+              <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>{o.label}</button>
+            ))}
+          </div>
+        </TweakRow>
+      );
+    }
+
+    function __twkIsLight(hex) {
+      const h = String(hex).replace('#', '');
+      const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+      const n = parseInt(x.slice(0, 6), 16);
+      if (Number.isNaN(n)) return true;
+      const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+      return r * 299 + g * 587 + b * 114 > 148000;
+    }
+
+    const __TwkCheck = ({ light }) => (
+      <svg viewBox="0 0 14 14" aria-hidden="true">
+        <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+      </svg>
+    );
+
+    function TweakColor({ label, value, options, onChange }) {
+      if (!options || !options.length) {
+        return (
+          <div className="twk-row twk-row-h">
+            <div className="twk-lbl"><span>{label}</span></div>
+            <input type="color" className="twk-swatch" value={value} onChange={(e) => onChange(e.target.value)} />
+          </div>
+        );
+      }
+      const key = (o) => String(JSON.stringify(o)).toLowerCase();
+      const cur = key(value);
+      return (
+        <TweakRow label={label}>
+          <div className="twk-chips" role="radiogroup">
+            {options.map((o, i) => {
+              const colors = Array.isArray(o) ? o : [o];
+              const [hero, ...rest] = colors;
+              const sup = rest.slice(0, 4);
+              const on = key(o) === cur;
+              return (
+                <button key={i} type="button" className="twk-chip" role="radio" aria-checked={on} data-on={on ? '1' : '0'}
+                  aria-label={colors.join(', ')} title={colors.join(' · ')} style={{ background: hero }} onClick={() => onChange(o)}>
+                  {sup.length > 0 && <span>{sup.map((c, j) => <i key={j} style={{ background: c }} />)}</span>}
+                  {on && <__TwkCheck light={__twkIsLight(hero)} />}
+                </button>
+              );
+            })}
+          </div>
+        </TweakRow>
+      );
+    }
+
+    // ─── CALCULATION ENGINE ───────────────────────────────────────────────────────
+    const MARKET_RATE = 4.35;
+    const STRESS_DELTA = 3;
+    const LTI_CAP = 4.5;
+
+    function calcSDLT(price, buyerType) {
+      if (price <= 0) return { total: 0, bands: [] };
+      let bands = [], type = buyerType;
+      if (type === "firstTime") {
+        if (price > 500000) { type = "standard"; }
+        else {
+          const b2 = Math.max(0, Math.min(price, 500000) - 300000);
+          return { total: b2 * 0.05, bands: [
+            { label: "£0 – £300,000", rate: 0, tax: 0 },
+            ...(b2 > 0 ? [{ label: "£300,001 – £500,000", rate: 5, tax: b2 * 0.05 }] : [])
+          ]};
+        }
+      }
+      if (type === "standard") {
+        const T = [{ limit: 125000, rate: 0 },{ limit: 250000, rate: 2 },{ limit: 925000, rate: 5 },{ limit: 1500000, rate: 10 },{ limit: Infinity, rate: 12 }];
+        const L = ["£0 – £125,000","£125,001 – £250,000","£250,001 – £925,000","£925,001 – £1,500,000","Above £1,500,000"];
+        let prev = 0;
+        T.forEach(({ limit, rate }, i) => { if (price > prev) { const t = Math.min(price, limit) - prev; if (t > 0) bands.push({ label: L[i], rate, tax: t * rate / 100 }); prev = limit; } });
+        return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
+      }
+      if (type === "additional") {
+        const T = [{ limit: 125000, r: 5 },{ limit: 250000, r: 7 },{ limit: 925000, r: 10 },{ limit: 1500000, r: 15 },{ limit: Infinity, r: 17 }];
+        const L = ["£0 – £125,000","£125,001 – £250,000","£250,001 – £925,000","£925,001 – £1,500,000","Above £1,500,000"];
+        let prev = 0;
+        T.forEach(({ limit, r }, i) => { if (price > prev) { const t = Math.min(price, limit) - prev; if (t > 0) bands.push({ label: L[i], rate: r, tax: t * r / 100 }); prev = limit; } });
+        return { total: bands.reduce((s, b) => s + b.tax, 0), bands };
+      }
+      return { total: 0, bands: [] };
+    }
+
+    function calcMortgage(principal, annualRate, years) {
+      if (!principal || principal <= 0 || !years) return { monthly: 0, total: 0, interest: 0 };
+      const r = annualRate / 100 / 12, n = years * 12;
+      if (r === 0) return { monthly: principal / n, total: principal, interest: 0 };
+      const monthly = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+      return { monthly, total: monthly * n, interest: monthly * n - principal };
+    }
+
+    function fmt(n) {
+      if (n === undefined || n === null || isNaN(n)) return "£0";
+      const abs = Math.abs(Math.round(n));
+      return (n < 0 ? "-£" : "£") + abs.toLocaleString("en-GB");
+    }
+    function fmtPct(n) { return (Math.round(n * 100) / 100) + "%"; }
+
+    const JOURNEYS = {
+      ftb: { label: "My first home", desc: "Buying for the first time — no property to sell, first-time buyer stamp duty relief.", badge: "First-Time Buyer", buyerType: "firstTime", hasSale: false },
+      mover: { label: "Moving home", desc: "Selling my current property and buying the next one — the classic chain.", badge: "Home Mover", buyerType: "standard", hasSale: true },
+      additional: { label: "An additional property", desc: "Buying while keeping my current property — second home or buy-to-let. +5% stamp duty applies.", badge: "Additional Property", buyerType: "additional", hasSale: false },
+    };
+
+    // ─── UI COMPONENTS ────────────────────────────────────────────────────────────
+    function Ornament({ kind = "rule", style }) {
+      if (kind === "fan") {
+        return (
+          <svg className="cr-fan" width="42" height="20" viewBox="0 0 42 20" style={style} aria-hidden="true">
+            {[0,1,2,3,4,5,6].map(i => (
+              <line key={i} x1="21" y1="20" x2={3 + i*5.7} y2="2" stroke="var(--gold)" strokeWidth="1" opacity={0.35 + Math.abs(3-i)*0.12} />
+            ))}
+          </svg>
+        );
+      }
+      return null;
+    }
+
+    function MoneyInput({ value, onChange, placeholder, error, suffix }) {
+      const display = value === "" || value === 0 ? "" : Number(value).toLocaleString("en-GB");
+      return (
+        <div className="cr-money" style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          {!suffix && <span className="cr-money-sym">£</span>}
+          <input
+            type="text" inputMode="numeric" placeholder={placeholder} value={display}
+            className={"cr-input" + (error ? " cr-input-err" : "")}
+            style={{ paddingLeft: suffix ? 14 : 28, paddingRight: suffix ? 42 : 14 }}
+            onChange={e => { const raw = e.target.value.replace(/[^0-9]/g, ""); onChange(raw === "" ? "" : Number(raw)); }}
+          />
+          {suffix && <span className="cr-money-suffix">{suffix}</span>}
+        </div>
+      );
+    }
+
+    function NumInput({ label, value, onChange }) {
+      return (
+        <div style={{ marginBottom: 12 }}>
+          <label className="cr-field-label">{label}</label>
+          <input type="number" value={value} onChange={e => onChange(Number(e.target.value))} className="cr-input" />
+        </div>
+      );
+    }
+
+    function SliderInput({ label, value, onChange, min, max, step = 1000, prefix = "£", suffix = "", hint }) {
+      const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+      return (
+        <div style={{ marginBottom: 18 }}>
+          {label && <div className="cr-slider-head">
+            <span className="cr-field-label" style={{ marginBottom: 0 }}>{label}</span>
+            <span className="cr-slider-val">{prefix}{typeof value === "number" ? value.toLocaleString("en-GB") : value}{suffix}</span>
+          </div>}
+          {hint && <div className="cr-hint">{hint}</div>}
+          <div className="cr-track">
+            <div className="cr-track-fill" style={{ width: pct + "%" }} />
+            <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))} className="cr-range" />
+          </div>
+          <div className="cr-track-ends">
+            <span>{prefix}{min.toLocaleString("en-GB")}{suffix}</span>
+            <span>{prefix}{max.toLocaleString("en-GB")}{suffix}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function PillToggle({ options, value, onChange }) {
+      return (
+        <div className="cr-pills">
+          {options.map(o => (
+            <button key={o.value} onClick={() => onChange(o.value)} className={"cr-pill" + (value === o.value ? " cr-pill-on" : "")}>{o.label}</button>
+          ))}
+        </div>
+      );
+    }
+
+    function Card({ title, subtitle, children, accent, ornament }) {
+      return (
+        <div className={"cr-card" + (accent ? " cr-card-accent" : "")} style={accent ? { "--card-accent": accent } : undefined}>
+          {title && (
+            <div className="cr-card-head">
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8", marginBottom: 2 }}>{s.t}</div>
-                <div style={{ fontSize: 12, color: d ? "#666" : "#8a87a0", lineHeight: 1.6 }}>{s.b}</div>
+                <div className="cr-card-title">{title}</div>
+                {subtitle && <div className="cr-card-sub">{subtitle}</div>}
               </div>
+              {ornament !== false && <Ornament kind="fan" />}
+            </div>
+          )}
+          <div className="cr-card-body">{children}</div>
+        </div>
+      );
+    }
+
+    function CostRow({ label, value, sub, highlight }) {
+      return (
+        <div className={"cr-row" + (highlight ? " cr-row-hl" : "")}>
+          <span className="cr-row-label">{label}</span>
+          <div className="cr-row-right">
+            {sub && <span className="cr-row-sub">{sub}</span>}
+            <span className="cr-row-val">{fmt(value)}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function Donut({ segments, centerLabel, centerValue, size = 200 }) {
+      const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0) || 1;
+      const r = size / 2 - 16;
+      const cx = size / 2, cy = size / 2;
+      const circ = 2 * Math.PI * r;
+      let offset = 0;
+      const arcs = segments.map((seg, i) => {
+        const frac = Math.max(0, seg.value) / total;
+        const len = frac * circ;
+        const arc = (
+          <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+            stroke={seg.color} strokeWidth="16"
+            strokeDasharray={`${len} ${circ - len}`}
+            strokeDashoffset={-offset}
+            transform={`rotate(-90 ${cx} ${cy})`}
+            style={{ transition: "stroke-dasharray 0.5s ease, stroke-dashoffset 0.5s ease" }} />
+        );
+        offset += len;
+        return arc;
+      });
+      return (
+        <div className="cr-donut-wrap">
+          <svg width={size} height={size} className="cr-donut">
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line)" strokeWidth="16" />
+            {arcs}
+            <circle cx={cx} cy={cy} r={r - 22} fill="none" stroke="var(--gold)" strokeWidth="0.75" opacity="0.4" />
+          </svg>
+          <div className="cr-donut-center">
+            <div className="cr-donut-c-label">{centerLabel}</div>
+            <div className="cr-donut-c-val">{centerValue}</div>
+          </div>
+        </div>
+      );
+    }
+
+    function Legend({ segments }) {
+      const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0) || 1;
+      return (
+        <div className="cr-legend">
+          {segments.map((s, i) => (
+            <div key={i} className="cr-legend-row">
+              <span className="cr-legend-dot" style={{ background: s.color }} />
+              <span className="cr-legend-label">{s.label}</span>
+              <span className="cr-legend-pct">{Math.round(s.value / total * 100)}%</span>
+              <span className="cr-legend-val">{fmt(s.value)}</span>
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 26, padding: "11px 15px", borderRadius: 8, background: "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: d ? "#7a6030" : "#a08850", lineHeight: 1.6 }}>
-          <strong style={{ color: "#c9a96e" }}>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared.
+      );
+    }
+
+    function StatTile({ label, value, sub, tone }) {
+      return (
+        <div className={"cr-tile" + (tone ? " cr-tile-" + tone : "")}>
+          <div className="cr-tile-label">{label}</div>
+          <div className="cr-tile-val">{value}</div>
+          {sub && <div className="cr-tile-sub">{sub}</div>}
         </div>
-      </div>
+      );
+    }
 
-      {/* Form */}
-      <div style={{ width: 420, maxWidth: "100%", background: d ? "#fff" : "#181820", border: `1px solid ${d ? "#e0ddd8" : "#2a2a38"}`, borderRadius: 16, padding: "30px 28px", boxShadow: d ? "0 4px 24px rgba(0,0,0,0.07)" : "0 4px 32px rgba(0,0,0,0.4)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: d ? "#1a1a1a" : "#f0ede8" }}>Your numbers</div>
-          <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 11, color: d ? "#999" : "#6a6880", cursor: "pointer", fontFamily: "inherit" }}>← Back</button>
-        </div>
-        <div style={{ fontSize: 12, color: d ? "#888" : "#8a87a0", marginBottom: 22 }}>Estimates are fine — everything stays editable inside the tool.</div>
+    // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+    const { useState, useMemo, useEffect } = React;
 
-        {order.map(k => {
-          const f = fieldDefs[k];
-          return (
-            <div key={k} style={{ marginBottom: 15 }}>
-              <label style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 500, color: errors[k] ? "#e07b6a" : d ? "#555" : "#8a87a0", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                <span>{f.label}{!f.required && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 4, color: d ? "#999" : "#666" }}>(optional)</span>}</span>
-                {errors[k] && <span style={{ fontSize: 10 }}>Required</span>}
-              </label>
-              <MoneyInput
-                value={values[k]}
-                onChange={v => { setValues(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: false })); }}
-                placeholder={f.suffix === "%" ? "e.g. 15" : k === "offerPrice" ? "e.g. 450,000" : k === "salePrice" ? "e.g. 320,000" : "e.g. 50,000"}
-                theme={theme} error={errors[k]} suffix={f.suffix}
-              />
-              <div style={{ fontSize: 11, color: d ? "#aaa" : "#555", marginTop: 4 }}>{f.hint}</div>
-            </div>
-          );
-        })}
+    const PIE = ["var(--gold)", "var(--gold-light)", "var(--gold-deep)", "var(--sage)", "var(--cream)", "var(--clay)", "var(--sage-deep)"];
 
-        <button onClick={handleSubmit}
-          style={{ width: "100%", padding: 13, marginTop: 6, background: "#c9a96e", color: "#0f0f13", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-          onMouseOver={e => e.target.style.opacity = 0.88} onMouseOut={e => e.target.style.opacity = 1}>
-          Show my position →
-        </button>
-      </div>
-    </div>
-  );
-}
+    const TWEAK_DEFAULTS = { direction: "savoy", accent: "#c8a24a", ornaments: true };
 
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
-function App() {
-  const [stage, setStage] = useState("journey"); // journey | details | dashboard
-  const [journey, setJourney] = useState(null);
-  const [theme, setTheme] = useState("dark");
-  const d = theme === "light";
-
-  // Onboarding values (preserved so Back / Edit keeps everything)
-  const [ob, setOb] = useState({ offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", savings: "" });
-
-  // Dashboard state
-  const [offerPrice, setOfferPrice] = useState(450000);
-  const [depositPct, setDepositPct] = useState(15);
-  const [buyerType, setBuyerType] = useState("standard");
-  const [mortgageRate, setMortgageRate] = useState(MARKET_RATE);
-  const [mortgageTerm, setMortgageTerm] = useState(25);
-  const [income, setIncome] = useState("");
-  const [salePrice, setSalePrice] = useState(320000);
-  const [agentFeePct, setAgentFeePct] = useState(1.5);
-  const [agentFeeVAT, setAgentFeeVAT] = useState(true);
-  const [buyerSolicitorFee, setBuyerSolicitorFee] = useState(2000);
-  const [sellerSolicitorFee, setSellerSolicitorFee] = useState(1500);
-  const [surveyFee, setSurveyFee] = useState(800);
-  const [removals, setRemovals] = useState(1200);
-  const [mortgageArrangement, setMortgageArrangement] = useState(999);
-  const [otherCosts, setOtherCosts] = useState(500);
-  const [existingMortgage, setExistingMortgage] = useState(0);
-  const [savings, setSavings] = useState(50000);
-  const [tab, setTab] = useState("overview");
-
-  // Scenario state
-  const [scen, setScen] = useState({ offerPrice: 450000, salePrice: 320000, depositPct: 15, rate: MARKET_RATE });
-
-  const hasSale = journey ? JOURNEYS[journey].hasSale : false;
-
-  const pickJourney = (key) => {
-    setJourney(key);
-    setBuyerType(JOURNEYS[key].buyerType);
-    setStage("details");
-  };
-
-  const completeOnboarding = () => {
-    const n = v => Number(v) || 0;
-    const op = n(ob.offerPrice), dp = n(ob.depositPct) || 10, sp = n(ob.salePrice), em = n(ob.existingMortgage), sv = n(ob.savings);
-    setOfferPrice(op); setDepositPct(dp); setSavings(sv);
-    if (JOURNEYS[journey].hasSale) { setSalePrice(sp); setExistingMortgage(em); }
-    setScen({ offerPrice: op, salePrice: sp, depositPct: dp, rate: MARKET_RATE });
-    setTab("overview");
-    setStage("dashboard");
-  };
-
-  // ── Core calcs ──
-  const depositAmount = offerPrice * depositPct / 100;
-  const mortgageLoan = offerPrice - depositAmount;
-  const ltv = offerPrice > 0 ? (mortgageLoan / offerPrice) * 100 : 0;
-  const sdlt = useMemo(() => calcSDLT(offerPrice, buyerType), [offerPrice, buyerType]);
-  const mortgage = useMemo(() => calcMortgage(mortgageLoan, mortgageRate, mortgageTerm), [mortgageLoan, mortgageRate, mortgageTerm]);
-  const stressMortgage = useMemo(() => calcMortgage(mortgageLoan, mortgageRate + STRESS_DELTA, mortgageTerm), [mortgageLoan, mortgageRate, mortgageTerm]);
-
-  const agentFeeBase = salePrice * agentFeePct / 100;
-  const agentFeeTotal = agentFeeBase * (agentFeeVAT ? 1.2 : 1);
-  const netSaleProceeds = hasSale ? salePrice - agentFeeTotal - sellerSolicitorFee - existingMortgage : 0;
-  const saleEquity = salePrice - existingMortgage;
-
-  const totalBuyingCosts = sdlt.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
-  const totalCashNeeded = depositAmount + totalBuyingCosts;
-  const cashAvailable = savings + (hasSale ? netSaleProceeds : 0);
-  const surplus = cashAvailable - totalCashNeeded;
-
-  const lti = income > 0 ? mortgageLoan / income : null;
-
-  // ── Scenario calcs ──
-  const sDeposit = scen.offerPrice * scen.depositPct / 100;
-  const sLoan = scen.offerPrice - sDeposit;
-  const sSDLT = calcSDLT(scen.offerPrice, buyerType);
-  const sAgentFee = scen.salePrice * agentFeePct / 100 * (agentFeeVAT ? 1.2 : 1);
-  const sNetSale = hasSale ? scen.salePrice - sAgentFee - sellerSolicitorFee - existingMortgage : 0;
-  const sCosts = sSDLT.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
-  const sNeeded = sDeposit + sCosts;
-  const sAvailable = savings + (hasSale ? sNetSale : 0);
-  const sSurplus = sAvailable - sNeeded;
-  const sMortgage = calcMortgage(sLoan, scen.rate, mortgageTerm);
-
-  // ── PDF export ──
-  const handleExportPDF = () => {
-    const win = window.open("", "_blank");
-    if (!win) return;
-    const s = surplus;
-    const saleSection = hasSale ? `
-      <div class="sec"><div class="sec-h">Cash Available</div><div class="sec-b">
-        <div class="row"><span>Sale Price</span><span>${fmt(salePrice)}</span></div>
-        <div class="row"><span>Agent Fee${agentFeeVAT ? " (incl. VAT)" : ""}</span><span>-${fmt(agentFeeTotal)}</span></div>
-        <div class="row"><span>Solicitor (sale)</span><span>-${fmt(sellerSolicitorFee)}</span></div>
-        <div class="row"><span>Mortgage Repaid</span><span>-${fmt(existingMortgage)}</span></div>
-        <div class="row"><span>Net from Sale</span><span>${fmt(netSaleProceeds)}</span></div>
-        <div class="row"><span>Savings</span><span>${fmt(savings)}</span></div>
-        <div class="total"><span>TOTAL AVAILABLE</span><span>${fmt(cashAvailable)}</span></div>
-      </div></div>` : `
-      <div class="sec"><div class="sec-h">Cash Available</div><div class="sec-b">
-        <div class="row"><span>Savings</span><span>${fmt(savings)}</span></div>
-        <div class="total"><span>TOTAL AVAILABLE</span><span>${fmt(cashAvailable)}</span></div>
-      </div></div>`;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>ChainReady Summary</title>
-    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;font-size:12px;color:#1a1a2e;background:#fff;padding:32px 36px}
-    h1{font-size:20px;font-weight:400;margin-bottom:4px}.sub{font-size:11px;color:#888;margin-bottom:18px}
-    .verdict{padding:12px 16px;border-radius:8px;margin:14px 0;font-size:13px;font-weight:600}
-    .ok{background:#f0fdf4;border:1px solid #86efac;color:#16a34a}.warn{background:#fff7f6;border:1px solid #fca5a5;color:#dc2626}
-    .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
-    .tile{background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;padding:10px 12px}
-    .tile-l{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
-    .tile-v{font-size:15px;font-weight:700;color:#1a1a2e}
-    .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-    .sec{background:#f8f7f5;border:1px solid #e5e3de;border-radius:7px;overflow:hidden}
-    .sec-h{background:#1a1a2e;color:#f0ede8;font-size:12px;padding:8px 12px}
-    .sec-b{padding:10px 12px}
-    .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e9e7e2;font-size:11px}
-    .row:last-child{border-bottom:none}
-    .total{display:flex;justify-content:space-between;padding:9px 12px;background:#1a1a2e;margin:8px -12px -10px}
-    .total span:first-child{color:#c9a96e;font-weight:600;font-size:11px}
-    .total span:last-child{color:#c9a96e;font-size:13px;font-weight:700}
-    .footer{margin-top:14px;font-size:9px;color:#999;border-top:1px solid #e5e3de;padding-top:10px;line-height:1.5}
-    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{margin:1.2cm;size:A4}}
-    </style></head><body>
-    <h1>ChainReady · ${JOURNEYS[journey].badge} Analysis</h1>
-    <div class="sub">Generated ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</div>
-    <div class="verdict ${s >= 0 ? "ok" : "warn"}">${s >= 0 ? "Cash surplus of " + fmt(s) + " after all costs" : "Cash shortfall of " + fmt(Math.abs(s)) + " — additional funds needed"}</div>
-    <div class="tiles">
-      <div class="tile"><div class="tile-l">Offer Price</div><div class="tile-v">${fmt(offerPrice)}</div></div>
-      <div class="tile"><div class="tile-l">Deposit (${depositPct}%)</div><div class="tile-v">${fmt(depositAmount)}</div></div>
-      <div class="tile"><div class="tile-l">Stamp Duty</div><div class="tile-v">${fmt(sdlt.total)}</div></div>
-      <div class="tile"><div class="tile-l">Mortgage</div><div class="tile-v">${fmt(mortgageLoan)}</div></div>
-      <div class="tile"><div class="tile-l">Monthly (${fmtPct(mortgageRate)})</div><div class="tile-v">${fmt(mortgage.monthly)}</div></div>
-      <div class="tile"><div class="tile-l">Surplus / Deficit</div><div class="tile-v" style="color:${s>=0?"#16a34a":"#dc2626"}">${s>=0?"+":""}${fmt(s)}</div></div>
-    </div>
-    <div class="cols">
-      <div class="sec"><div class="sec-h">Cash Needed</div><div class="sec-b">
-        <div class="row"><span>Deposit (${depositPct}%)</span><span>${fmt(depositAmount)}</span></div>
-        <div class="row"><span>Stamp Duty</span><span>${fmt(sdlt.total)}</span></div>
-        <div class="row"><span>Solicitor</span><span>${fmt(buyerSolicitorFee)}</span></div>
-        <div class="row"><span>Survey</span><span>${fmt(surveyFee)}</span></div>
-        <div class="row"><span>Mortgage Arrangement</span><span>${fmt(mortgageArrangement)}</span></div>
-        <div class="row"><span>Removals</span><span>${fmt(removals)}</span></div>
-        <div class="row"><span>Other</span><span>${fmt(otherCosts)}</span></div>
-        <div class="total"><span>TOTAL NEEDED</span><span>${fmt(totalCashNeeded)}</span></div>
-      </div></div>
-      ${saleSection}
-    </div>
-    <div class="footer">Illustrative only — not financial, legal or tax advice. SDLT rates reflect HMRC thresholds effective 1 April 2025. Mortgage rate default of ${MARKET_RATE}% reflects the best 5-year fixed available May 2026. Consult a qualified adviser before making decisions.</div>
-    </body></html>`);
-    win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 600);
-  };
-
-  // ── Theme tokens ──
-  const bg = d ? "#f5f4f0" : "#0f0f13";
-  const surface = d ? "#fff" : "#181820";
-  const border = d ? "#e0ddd8" : "#2a2a38";
-  const text = d ? "#1a1a1a" : "#f0ede8";
-  const muted = d ? "#888" : "#8a87a0";
-  const green = d ? "#16a34a" : "#6ec99a";
-  const red = d ? "#dc2626" : "#e07b6a";
-
-  const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "purchase", label: "Purchase" },
-    ...(hasSale ? [{ id: "sale", label: "Sale" }] : []),
-    { id: "mortgage", label: "Mortgage" },
-    { id: "stampduty", label: "Stamp Duty" },
-    { id: "scenario", label: "Scenarios" },
-  ];
-
-  const numInput = (label, v, fn) => (
-    <div key={label} style={{ marginBottom: 10 }}>
-      <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>{label}</label>
-      <input type="number" value={v} onChange={e => fn(Number(e.target.value))} style={{ width: "100%", background: d ? "#f8f7f5" : "#1e1e28", border: `1px solid ${border}`, color: text, fontFamily: "inherit", fontSize: 13, padding: "7px 10px", borderRadius: 7 }} />
-    </div>
-  );
-
-  // ── Render ──
-  return (
-    <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: "'Outfit', sans-serif", fontSize: 14, display: "flex", flexDirection: "column" }}>
-      <Header theme={theme} setTheme={setTheme} onExport={handleExportPDF} showExport={stage === "dashboard"} journey={stage !== "journey" ? journey : null} onChangeJourney={() => setStage("journey")} />
-
-      {stage === "journey" && <JourneyPicker onPick={pickJourney} theme={theme} />}
-      {stage === "details" && <DetailsForm journey={journey} values={ob} setValues={setOb} onBack={() => setStage("journey")} onComplete={completeOnboarding} theme={theme} />}
-
-      {stage === "dashboard" && (
-        <div style={{ flex: 1 }}>
-          <div style={{ background: surface, borderBottom: `1px solid ${border}`, display: "flex", overflowX: "auto", position: "sticky", top: 0, zIndex: 50 }}>
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{
-                padding: "10px 16px", fontSize: 12, fontWeight: 500, color: tab === t.id ? "#c9a96e" : muted,
-                border: "none", background: "none", cursor: "pointer", borderBottom: tab === t.id ? "2px solid #c9a96e" : "2px solid transparent",
-                whiteSpace: "nowrap", fontFamily: "inherit",
-              }}>{t.label}</button>
+    function JourneyPicker({ onPick }) {
+      return (
+        <div className="cr-stage cr-journey">
+          <span className="cr-step-tag">Step 1 of 2</span>
+          <Ornament kind="fan" style={{ margin: "0 auto 18px" }} />
+          <h1 className="cr-display-h1">What does your move<br /><em>look like?</em></h1>
+          <p className="cr-lede">ChainReady adapts everything — questions, stamp duty, and the cash maths — to your situation.</p>
+          <div className="cr-journey-list">
+            {Object.entries(JOURNEYS).map(([key, j]) => (
+              <button key={key} onClick={() => onPick(key)} className="cr-journey-card">
+                <div>
+                  <div className="cr-journey-title">{j.label}</div>
+                  <div className="cr-journey-desc">{j.desc}</div>
+                </div>
+                <span className="cr-journey-arrow">→</span>
+              </button>
             ))}
           </div>
+        </div>
+      );
+    }
 
-          <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 13, maxWidth: 980, margin: "0 auto" }}>
+    function DetailsForm({ journey, values, setValues, onBack, onComplete }) {
+      const j = JOURNEYS[journey];
+      const [errors, setErrors] = useState({});
 
-            {/* ── OVERVIEW ── */}
-            {tab === "overview" && (<React.Fragment>
-              <div style={{ borderRadius: 12, padding: "13px 16px", background: surplus >= 0 ? (d ? "rgba(22,163,74,0.08)" : "rgba(110,201,154,0.1)") : (d ? "rgba(220,38,38,0.08)" : "rgba(224,123,106,0.1)"), border: `1px solid ${surplus >= 0 ? (d ? "rgba(22,163,74,0.3)" : "rgba(110,201,154,0.25)") : (d ? "rgba(220,38,38,0.3)" : "rgba(224,123,106,0.25)")}` }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: surplus >= 0 ? green : red }}>
-                  {surplus >= 0 ? `You're ${fmt(surplus)} ahead after every cost` : `Shortfall of ${fmt(Math.abs(surplus))} — adjust your numbers or plan extra funds`}
-                </div>
-                <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>
-                  {hasSale ? "Based on your purchase and sale together" : "Based on your savings against deposit and all buying costs"} · Stress-test on the Scenarios tab
-                </div>
-              </div>
+      const fieldDefs = {
+        offerPrice:       { label: "Offer price on the new property", hint: "The price you plan to offer or have offered.", required: true },
+        depositPct:       { label: "Deposit", hint: "Percentage of the purchase price you'll put down.", required: true, suffix: "%" },
+        salePrice:        { label: "Expected sale price of your current property", hint: "Estimates are fine — you can refine later.", required: true },
+        existingMortgage: { label: "Mortgage outstanding on your current property", hint: "Balance left to repay. Leave blank if none.", required: false },
+        savings:          { label: j.hasSale ? "Additional savings you're bringing in" : "Savings available for this purchase", hint: j.hasSale ? "Cash on top of your sale proceeds." : "Your total cash available for deposit and costs.", required: !j.hasSale },
+      };
+      const order = j.hasSale
+        ? ["offerPrice", "depositPct", "salePrice", "existingMortgage", "savings"]
+        : ["offerPrice", "depositPct", "savings"];
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 9 }}>
-                {[
-                  { label: "Offer Price", value: fmt(offerPrice), sub: JOURNEYS[journey].badge, accent: true },
-                  { label: "Deposit", value: fmt(depositAmount), sub: `${depositPct}% · LTV ${fmtPct(ltv)}` },
-                  { label: "Stamp Duty", value: fmt(sdlt.total), sub: buyerType === "firstTime" ? "FTB relief applied" : buyerType === "additional" ? "+5% surcharge" : "Standard rates" },
-                  { label: "Monthly Payment", value: fmt(mortgage.monthly), sub: `${fmtPct(mortgageRate)} · ${mortgageTerm}yr` },
-                  ...(hasSale ? [{ label: "Net Sale Proceeds", value: fmt(netSaleProceeds), sub: `Equity ${fmt(saleEquity)}` }] : [{ label: "Total Cash Needed", value: fmt(totalCashNeeded), sub: "Deposit + all costs" }]),
-                  { label: "Surplus / Deficit", value: (surplus >= 0 ? "+" : "") + fmt(surplus), sub: "After all costs", pos: surplus >= 0, neg: surplus < 0 },
-                ].map((t, i) => (
-                  <div key={i} style={{ background: surface, border: `1px solid ${border}`, borderRadius: 12, padding: "11px 13px" }}>
-                    <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{t.label}</div>
-                    <div style={{ fontSize: 17, fontFamily: "'Georgia', serif", fontWeight: 700, color: t.accent ? "#c9a96e" : t.pos ? green : t.neg ? red : text }}>{t.value}</div>
-                    {t.sub && <div style={{ fontSize: 10, color: muted, marginTop: 3 }}>{t.sub}</div>}
+      const steps = j.hasSale ? [
+        { n: "I", t: "Enter your basics", b: "Quick estimates are fine — everything stays editable." },
+        { n: "II", t: "See your position", b: "Your cash surplus or shortfall after every cost, instantly." },
+        { n: "III", t: "Refine and stress-test", b: "Adjust fees, rates and prices. Run scenarios before you commit." },
+      ] : [
+        { n: "I", t: "Enter your basics", b: "Three numbers. Quick estimates are fine." },
+        { n: "II", t: "See your position", b: "Whether your savings cover the deposit and every buying cost." },
+        { n: "III", t: "Refine and stress-test", b: "Adjust costs and rates. Run scenarios before you offer." },
+      ];
+
+      const handleSubmit = () => {
+        const errs = {};
+        order.forEach(k => { if (fieldDefs[k].required && (!values[k] || Number(values[k]) <= 0)) errs[k] = true; });
+        setErrors(errs);
+        if (Object.keys(errs).length === 0) onComplete();
+      };
+
+      return (
+        <div className="cr-stage cr-details">
+          <div className="cr-guide">
+            <span className="cr-step-tag">Step 2 of 2 · {j.badge}</span>
+            <div className="cr-guide-h">Plan your move<br /><em>with clarity.</em></div>
+            <p className="cr-guide-p">
+              {j.hasSale
+                ? "ChainReady calculates your full position across both the purchase and the sale — so you know exactly where you stand before you negotiate."
+                : "ChainReady calculates your full position — deposit, stamp duty, fees and mortgage — so you know exactly where you stand before you offer."}
+            </p>
+            <div className="cr-steps">
+              {steps.map(s => (
+                <div key={s.n} className="cr-step">
+                  <div className="cr-step-num">{s.n}</div>
+                  <div>
+                    <div className="cr-step-t">{s.t}</div>
+                    <div className="cr-step-b">{s.b}</div>
                   </div>
+                </div>
+              ))}
+            </div>
+            <div className="cr-note"><strong>No sign-up needed.</strong> Your numbers stay in your browser — nothing is saved or shared.</div>
+          </div>
+
+          <div className="cr-form">
+            <div className="cr-form-head">
+              <div className="cr-form-title">Your numbers</div>
+              <button onClick={onBack} className="cr-link">← Back</button>
+            </div>
+            <div className="cr-form-sub">Estimates are fine — everything stays editable inside the tool.</div>
+            {order.map(k => {
+              const f = fieldDefs[k];
+              return (
+                <div key={k} style={{ marginBottom: 16 }}>
+                  <label className={"cr-field-label" + (errors[k] ? " cr-err" : "")}>
+                    <span>{f.label}{!f.required && <span className="cr-opt">(optional)</span>}</span>
+                    {errors[k] && <span className="cr-err-tag">Required</span>}
+                  </label>
+                  <MoneyInput
+                    value={values[k]}
+                    onChange={v => { setValues(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: false })); }}
+                    placeholder={f.suffix === "%" ? "e.g. 15" : k === "offerPrice" ? "e.g. 450,000" : k === "salePrice" ? "e.g. 320,000" : "e.g. 50,000"}
+                    error={errors[k]} suffix={f.suffix}
+                  />
+                  <div className="cr-hint">{f.hint}</div>
+                </div>
+              );
+            })}
+            <button onClick={handleSubmit} className="cr-btn-gold cr-btn-block">Show my position →</button>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+      const [stage, setStage] = useState("journey");
+      const [journey, setJourney] = useState(null);
+      const [ob, setOb] = useState({ offerPrice: "", depositPct: "", salePrice: "", existingMortgage: "", savings: "" });
+
+      const [offerPrice, setOfferPrice] = useState(450000);
+      const [depositPct, setDepositPct] = useState(15);
+      const [buyerType, setBuyerType] = useState("standard");
+      const [mortgageRate, setMortgageRate] = useState(MARKET_RATE);
+      const [mortgageTerm, setMortgageTerm] = useState(25);
+      const [income, setIncome] = useState("");
+      const [salePrice, setSalePrice] = useState(320000);
+      const [agentFeePct, setAgentFeePct] = useState(1.5);
+      const [agentFeeVAT, setAgentFeeVAT] = useState(true);
+      const [buyerSolicitorFee, setBuyerSolicitorFee] = useState(2000);
+      const [sellerSolicitorFee, setSellerSolicitorFee] = useState(1500);
+      const [surveyFee, setSurveyFee] = useState(800);
+      const [removals, setRemovals] = useState(1200);
+      const [mortgageArrangement, setMortgageArrangement] = useState(999);
+      const [otherCosts, setOtherCosts] = useState(500);
+      const [existingMortgage, setExistingMortgage] = useState(0);
+      const [savings, setSavings] = useState(50000);
+      const [tab, setTab] = useState("overview");
+      const [scen, setScen] = useState({ offerPrice: 450000, salePrice: 320000, depositPct: 15, rate: MARKET_RATE });
+
+      const hasSale = journey ? JOURNEYS[journey].hasSale : false;
+
+      useEffect(() => {
+        const root = document.getElementById("cr-root");
+        if (!root) return;
+        root.setAttribute("data-direction", t.direction);
+        root.setAttribute("data-ornaments", t.ornaments ? "on" : "off");
+        root.style.setProperty("--gold", t.accent);
+      }, [t.direction, t.ornaments, t.accent]);
+
+      const pickJourney = (key) => { setJourney(key); setBuyerType(JOURNEYS[key].buyerType); setStage("details"); };
+      const completeOnboarding = () => {
+        const n = v => Number(v) || 0;
+        const op = n(ob.offerPrice), dp = n(ob.depositPct) || 10, sp = n(ob.salePrice), em = n(ob.existingMortgage), sv = n(ob.savings);
+        setOfferPrice(op); setDepositPct(dp); setSavings(sv);
+        if (JOURNEYS[journey].hasSale) { setSalePrice(sp); setExistingMortgage(em); }
+        setScen({ offerPrice: op, salePrice: sp, depositPct: dp, rate: MARKET_RATE });
+        setTab("overview"); setStage("dashboard");
+      };
+
+      const depositAmount = offerPrice * depositPct / 100;
+      const mortgageLoan = offerPrice - depositAmount;
+      const ltv = offerPrice > 0 ? (mortgageLoan / offerPrice) * 100 : 0;
+      const sdlt = useMemo(() => calcSDLT(offerPrice, buyerType), [offerPrice, buyerType]);
+      const mortgage = useMemo(() => calcMortgage(mortgageLoan, mortgageRate, mortgageTerm), [mortgageLoan, mortgageRate, mortgageTerm]);
+      const stressMortgage = useMemo(() => calcMortgage(mortgageLoan, mortgageRate + STRESS_DELTA, mortgageTerm), [mortgageLoan, mortgageRate, mortgageTerm]);
+
+      const agentFeeBase = salePrice * agentFeePct / 100;
+      const agentFeeTotal = agentFeeBase * (agentFeeVAT ? 1.2 : 1);
+      const netSaleProceeds = hasSale ? salePrice - agentFeeTotal - sellerSolicitorFee - existingMortgage : 0;
+      const saleEquity = salePrice - existingMortgage;
+
+      const totalBuyingCosts = sdlt.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
+      const totalCashNeeded = depositAmount + totalBuyingCosts;
+      const cashAvailable = savings + (hasSale ? netSaleProceeds : 0);
+      const surplus = cashAvailable - totalCashNeeded;
+      const lti = income > 0 ? mortgageLoan / income : null;
+
+      const sDeposit = scen.offerPrice * scen.depositPct / 100;
+      const sLoan = scen.offerPrice - sDeposit;
+      const sSDLT = calcSDLT(scen.offerPrice, buyerType);
+      const sAgentFee = scen.salePrice * agentFeePct / 100 * (agentFeeVAT ? 1.2 : 1);
+      const sNetSale = hasSale ? scen.salePrice - sAgentFee - sellerSolicitorFee - existingMortgage : 0;
+      const sCosts = sSDLT.total + buyerSolicitorFee + surveyFee + removals + mortgageArrangement + otherCosts;
+      const sNeeded = sDeposit + sCosts;
+      const sAvailable = savings + (hasSale ? sNetSale : 0);
+      const sSurplus = sAvailable - sNeeded;
+      const sMortgage = calcMortgage(sLoan, scen.rate, mortgageTerm);
+
+      const costSegments = [
+        { label: "Deposit", value: depositAmount, color: "var(--gold)" },
+        { label: "Stamp Duty", value: sdlt.total, color: "var(--gold-light)" },
+        { label: "Solicitor", value: buyerSolicitorFee, color: "var(--sage)" },
+        { label: "Survey", value: surveyFee, color: "var(--gold-deep)" },
+        { label: "Mortgage fee", value: mortgageArrangement, color: "var(--clay)" },
+        { label: "Removals", value: removals, color: "var(--sage-deep)" },
+        { label: "Other", value: otherCosts, color: "var(--cream)" },
+      ].filter(s => s.value > 0);
+
+      const handleExportPDF = () => {
+        const win = window.open("", "_blank");
+        if (!win) return;
+        const s = surplus;
+        const saleSection = hasSale ? `
+          <div class="sec"><div class="sec-h">Cash Available</div><div class="sec-b">
+            <div class="row"><span>Sale Price</span><span>${fmt(salePrice)}</span></div>
+            <div class="row"><span>Agent Fee${agentFeeVAT ? " (incl. VAT)" : ""}</span><span>-${fmt(agentFeeTotal)}</span></div>
+            <div class="row"><span>Solicitor (sale)</span><span>-${fmt(sellerSolicitorFee)}</span></div>
+            <div class="row"><span>Mortgage Repaid</span><span>-${fmt(existingMortgage)}</span></div>
+            <div class="row"><span>Net from Sale</span><span>${fmt(netSaleProceeds)}</span></div>
+            <div class="row"><span>Savings</span><span>${fmt(savings)}</span></div>
+            <div class="total"><span>TOTAL AVAILABLE</span><span>${fmt(cashAvailable)}</span></div>
+          </div></div>` : `
+          <div class="sec"><div class="sec-h">Cash Available</div><div class="sec-b">
+            <div class="row"><span>Savings</span><span>${fmt(savings)}</span></div>
+            <div class="total"><span>TOTAL AVAILABLE</span><span>${fmt(cashAvailable)}</span></div>
+          </div></div>`;
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>ChainReady Summary</title>
+        <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;font-size:12px;color:#15241f;background:#fff;padding:32px 36px}
+        h1{font-size:20px;font-weight:400;margin-bottom:4px;letter-spacing:1px}.sub{font-size:11px;color:#888;margin-bottom:18px}
+        .verdict{padding:12px 16px;border-radius:2px;margin:14px 0;font-size:13px;font-weight:600}
+        .ok{background:#eef6f0;border:1px solid #1f8a5b;color:#1f8a5b}.warn{background:#fbf0ec;border:1px solid #b4542f;color:#b4542f}
+        .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+        .tile{background:#f6f3ea;border:1px solid #e0d9c5;border-radius:2px;padding:10px 12px}
+        .tile-l{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}
+        .tile-v{font-size:15px;font-weight:700;color:#15241f}
+        .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+        .sec{background:#f6f3ea;border:1px solid #e0d9c5;border-radius:2px;overflow:hidden}
+        .sec-h{background:#0f1f1c;color:#e8e2d0;font-size:12px;padding:8px 12px;letter-spacing:1px}
+        .sec-b{padding:10px 12px}
+        .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e9e2d2;font-size:11px}
+        .row:last-child{border-bottom:none}
+        .total{display:flex;justify-content:space-between;padding:9px 12px;background:#0f1f1c;margin:8px -12px -10px}
+        .total span:first-child{color:#c8a24a;font-weight:600;font-size:11px;letter-spacing:1px}
+        .total span:last-child{color:#c8a24a;font-size:13px;font-weight:700}
+        .footer{margin-top:14px;font-size:9px;color:#999;border-top:1px solid #e0d9c5;padding-top:10px;line-height:1.5}
+        @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{margin:1.2cm;size:A4}}
+        </style></head><body>
+        <h1>CHAINREADY · ${JOURNEYS[journey].badge} Analysis</h1>
+        <div class="sub">Generated ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</div>
+        <div class="verdict ${s >= 0 ? "ok" : "warn"}">${s >= 0 ? "Cash surplus of " + fmt(s) + " after all costs" : "Cash shortfall of " + fmt(Math.abs(s)) + " — additional funds needed"}</div>
+        <div class="tiles">
+          <div class="tile"><div class="tile-l">Offer Price</div><div class="tile-v">${fmt(offerPrice)}</div></div>
+          <div class="tile"><div class="tile-l">Deposit (${depositPct}%)</div><div class="tile-v">${fmt(depositAmount)}</div></div>
+          <div class="tile"><div class="tile-l">Stamp Duty</div><div class="tile-v">${fmt(sdlt.total)}</div></div>
+          <div class="tile"><div class="tile-l">Mortgage</div><div class="tile-v">${fmt(mortgageLoan)}</div></div>
+          <div class="tile"><div class="tile-l">Monthly (${fmtPct(mortgageRate)})</div><div class="tile-v">${fmt(mortgage.monthly)}</div></div>
+          <div class="tile"><div class="tile-l">Surplus / Deficit</div><div class="tile-v" style="color:${s>=0?"#1f8a5b":"#b4542f"}">${s>=0?"+":""}${fmt(s)}</div></div>
+        </div>
+        <div class="cols">
+          <div class="sec"><div class="sec-h">Cash Needed</div><div class="sec-b">
+            <div class="row"><span>Deposit (${depositPct}%)</span><span>${fmt(depositAmount)}</span></div>
+            <div class="row"><span>Stamp Duty</span><span>${fmt(sdlt.total)}</span></div>
+            <div class="row"><span>Solicitor</span><span>${fmt(buyerSolicitorFee)}</span></div>
+            <div class="row"><span>Survey</span><span>${fmt(surveyFee)}</span></div>
+            <div class="row"><span>Mortgage Arrangement</span><span>${fmt(mortgageArrangement)}</span></div>
+            <div class="row"><span>Removals</span><span>${fmt(removals)}</span></div>
+            <div class="row"><span>Other</span><span>${fmt(otherCosts)}</span></div>
+            <div class="total"><span>TOTAL NEEDED</span><span>${fmt(totalCashNeeded)}</span></div>
+          </div></div>
+          ${saleSection}
+        </div>
+        <div class="footer">Illustrative only — not financial, legal or tax advice. SDLT rates reflect HMRC thresholds effective 1 April 2025. Mortgage rate default of ${MARKET_RATE}% reflects the best 5-year fixed available May 2026. Consult a qualified adviser before making decisions.</div>
+        </body></html>`);
+        win.document.close();
+        setTimeout(() => { win.focus(); win.print(); }, 600);
+      };
+
+      const tabs = [
+        { id: "overview", label: "Overview" },
+        { id: "purchase", label: "Purchase" },
+        ...(hasSale ? [{ id: "sale", label: "Sale" }] : []),
+        { id: "mortgage", label: "Mortgage" },
+        { id: "stampduty", label: "Stamp Duty" },
+        { id: "scenario", label: "Scenarios" },
+      ];
+
+      return (
+        <div className="cr-app">
+          {/* Header */}
+          <div className="cr-header">
+            <div className="cr-brand-wrap">
+              <span className="cr-brand">ChainReady</span>
+              {stage !== "journey" && journey && (
+                <button onClick={() => setStage("journey")} className="cr-badge">{JOURNEYS[journey].badge} · change</button>
+              )}
+            </div>
+            <div className="cr-header-right">
+              {stage === "dashboard" && (
+                <button onClick={handleExportPDF} className="cr-link cr-export">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Export PDF
+                </button>
+              )}
+            </div>
+          </div>
+
+          {stage === "journey" && <JourneyPicker onPick={pickJourney} />}
+          {stage === "details" && <DetailsForm journey={journey} values={ob} setValues={setOb} onBack={() => setStage("journey")} onComplete={completeOnboarding} />}
+
+          {stage === "dashboard" && (
+            <div className="cr-dashboard">
+              <div className="cr-tabs">
+                {tabs.map(tb => (
+                  <button key={tb.id} onClick={() => setTab(tb.id)} className={"cr-tab" + (tab === tb.id ? " cr-tab-on" : "")}>{tb.label}</button>
                 ))}
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 13 }}>
-                <Card title="Cash Needed to Buy" accent="#e07b6a" theme={theme}>
-                  <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} theme={theme} />
-                  <CostRow label="Stamp Duty" value={sdlt.total} theme={theme} />
-                  <CostRow label="Solicitor (purchase)" value={buyerSolicitorFee} theme={theme} />
-                  <CostRow label="Survey" value={surveyFee} theme={theme} />
-                  <CostRow label="Mortgage Arrangement" value={mortgageArrangement} theme={theme} />
-                  <CostRow label="Removals" value={removals} theme={theme} />
-                  <CostRow label="Other" value={otherCosts} theme={theme} />
-                  <CostRow label="TOTAL NEEDED" value={totalCashNeeded} highlight theme={theme} />
-                </Card>
-                <Card title="Cash Available" accent="#6ec99a" theme={theme}>
-                  {hasSale && (<React.Fragment>
-                    <CostRow label="Sale Price" value={salePrice} theme={theme} />
-                    <CostRow label="Agent Fee" value={-agentFeeTotal} sub={`${agentFeePct}%${agentFeeVAT ? " +VAT" : ""}`} theme={theme} />
-                    <CostRow label="Solicitor (sale)" value={-sellerSolicitorFee} theme={theme} />
-                    <CostRow label="Mortgage Repaid" value={-existingMortgage} theme={theme} />
-                    <CostRow label="Net from Sale" value={netSaleProceeds} highlight theme={theme} />
-                    <div style={{ marginTop: 6 }} />
-                  </React.Fragment>)}
-                  <CostRow label="Savings" value={savings} theme={theme} />
-                  <CostRow label="TOTAL AVAILABLE" value={cashAvailable} highlight theme={theme} />
-                </Card>
-              </div>
-
-              {lti !== null && lti > LTI_CAP && (
-                <div style={{ borderRadius: 10, padding: "10px 14px", background: d ? "rgba(220,38,38,0.06)" : "rgba(224,123,106,0.08)", border: `1px solid ${d ? "rgba(220,38,38,0.2)" : "rgba(224,123,106,0.2)"}`, fontSize: 12, color: red }}>
-                  Heads-up: your loan is {lti.toFixed(1)}× your income — most lenders cap at ~{LTI_CAP}×. See the Mortgage tab.
-                </div>
-              )}
-
-              <div style={{ background: "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, padding: "9px 12px", fontSize: 11, color: d ? "#7a6030" : "#8a87a0", lineHeight: 1.6 }}>
-                <strong style={{ color: "#c9a96e" }}>SDLT (England & NI, post April 2025):</strong> 0% to £125k · 2% to £250k · 5% to £925k · 10% to £1.5m · 12% above. First-time buyers: 0% to £300k (relief up to £500k). Additional property: +5% on every band.
-              </div>
-              <button onClick={() => setStage("details")} style={{ alignSelf: "flex-start", background: "none", border: `1px solid ${border}`, borderRadius: 6, padding: "5px 12px", fontSize: 11, color: muted, cursor: "pointer", fontFamily: "inherit" }}>← Edit my numbers</button>
-            </React.Fragment>)}
-
-            {/* ── PURCHASE ── */}
-            {tab === "purchase" && (<React.Fragment>
-              <Card title="Purchase Details" theme={theme}>
-                <SliderInput label="Offer / Purchase Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} theme={theme} />
-                <SliderInput label="Deposit" value={depositPct} onChange={setDepositPct} min={5} max={60} step={1} prefix="" suffix="%" theme={theme} />
-              </Card>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 13 }}>
-                <Card title="Deposit & Loan" theme={theme}>
-                  <CostRow label="Offer Price" value={offerPrice} theme={theme} />
-                  <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} theme={theme} />
-                  <CostRow label="Mortgage Required" value={mortgageLoan} highlight theme={theme} />
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>Loan-to-value: {fmtPct(ltv)}</div>
-                    <div style={{ height: 7, borderRadius: 4, background: d ? "#e0ddd8" : "#2a2a38", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${Math.min(100, ltv)}%`, background: "linear-gradient(90deg,#c9a96e,#7eb8b0)" }} />
+              <div className="cr-content">
+                {/* OVERVIEW */}
+                {tab === "overview" && (<React.Fragment>
+                  <div className={"cr-verdict " + (surplus >= 0 ? "cr-verdict-ok" : "cr-verdict-warn")}>
+                    <div className="cr-verdict-main">
+                      {surplus >= 0 ? `You're ${fmt(surplus)} ahead after every cost` : `Shortfall of ${fmt(Math.abs(surplus))} — adjust your numbers or plan extra funds`}
                     </div>
-                    <div style={{ fontSize: 10, color: muted, marginTop: 4 }}>
-                      {ltv > 90 ? "Above 90% LTV — fewer products, higher rates" : ltv > 75 ? "75–90% LTV — mainstream territory" : "Below 75% LTV — access to the best rates"}
+                    <div className="cr-verdict-sub">
+                      {hasSale ? "Based on your purchase and sale together" : "Based on your savings against deposit and all buying costs"} · Stress-test on the Scenarios tab
                     </div>
                   </div>
-                </Card>
-                <Card title="Buying Costs" subtitle="Adjust to match your quotes" theme={theme}>
-                  {numInput("Solicitor / conveyancing (£)", buyerSolicitorFee, setBuyerSolicitorFee)}
-                  {numInput("Survey (£)", surveyFee, setSurveyFee)}
-                  {numInput("Mortgage arrangement (£)", mortgageArrangement, setMortgageArrangement)}
-                  {numInput("Removals (£)", removals, setRemovals)}
-                  {numInput("Other (£)", otherCosts, setOtherCosts)}
-                </Card>
-              </div>
-              {!hasSale && <Card title="Savings" theme={theme}>{numInput("Savings available (£)", savings, setSavings)}</Card>}
-            </React.Fragment>)}
 
-            {/* ── SALE ── */}
-            {tab === "sale" && hasSale && (<React.Fragment>
-              <Card title="Your Current Property Sale" theme={theme}>
-                <SliderInput label="Expected Sale Price" value={salePrice} onChange={setSalePrice} min={100000} max={2000000} step={5000} theme={theme} />
-                <SliderInput label="Existing Mortgage" value={existingMortgage} onChange={setExistingMortgage} min={0} max={Math.max(100000, salePrice)} step={5000} hint={`Equity: ${fmt(saleEquity)}`} theme={theme} />
-                <SliderInput label="Agent Fee" value={agentFeePct} onChange={setAgentFeePct} min={0.5} max={3.5} step={0.1} prefix="" suffix="%" hint="Typical UK: 1.0–2.0% + VAT" theme={theme} />
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0" }}>
-                  <span style={{ fontSize: 12, color: muted }}>Agent fee includes VAT (20%)</span>
-                  <div onClick={() => setAgentFeeVAT(v => !v)} style={{ width: 32, height: 18, borderRadius: 10, background: agentFeeVAT ? "#c9a96e" : (d ? "#ddd" : "#2a2a38"), cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
-                    <div style={{ position: "absolute", width: 12, height: 12, borderRadius: "50%", background: "#fff", top: 3, left: agentFeeVAT ? 17 : 3, transition: "left 0.2s" }} />
+                  <div className="cr-tiles">
+                    <StatTile label="Offer Price" value={fmt(offerPrice)} sub={JOURNEYS[journey].badge} tone="accent" />
+                    <StatTile label="Deposit" value={fmt(depositAmount)} sub={`${depositPct}% · LTV ${fmtPct(ltv)}`} />
+                    <StatTile label="Stamp Duty" value={fmt(sdlt.total)} sub={buyerType === "firstTime" ? "FTB relief applied" : buyerType === "additional" ? "+5% surcharge" : "Standard rates"} />
+                    <StatTile label="Monthly Payment" value={fmt(mortgage.monthly)} sub={`${fmtPct(mortgageRate)} · ${mortgageTerm}yr`} />
+                    {hasSale
+                      ? <StatTile label="Net Sale Proceeds" value={fmt(netSaleProceeds)} sub={`Equity ${fmt(saleEquity)}`} />
+                      : <StatTile label="Total Cash Needed" value={fmt(totalCashNeeded)} sub="Deposit + all costs" />}
+                    <StatTile label="Surplus / Deficit" value={(surplus >= 0 ? "+" : "") + fmt(surplus)} sub="After all costs" tone={surplus >= 0 ? "pos" : "neg"} />
                   </div>
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  {numInput("Solicitor — sale side (£)", sellerSolicitorFee, setSellerSolicitorFee)}
-                  {numInput("Additional savings (£)", savings, setSavings)}
-                </div>
-              </Card>
-              <Card title="Sale Proceeds Breakdown" theme={theme}>
-                <CostRow label="Gross Sale Price" value={salePrice} theme={theme} />
-                <CostRow label="Agent Fee (excl VAT)" value={-agentFeeBase} sub={`${agentFeePct}%`} theme={theme} />
-                {agentFeeVAT && <CostRow label="VAT on Agent Fee" value={-(agentFeeTotal - agentFeeBase)} theme={theme} />}
-                <CostRow label="Solicitor (sale)" value={-sellerSolicitorFee} theme={theme} />
-                <CostRow label="Mortgage Repaid" value={-existingMortgage} theme={theme} />
-                <CostRow label="Net Cash from Sale" value={netSaleProceeds} highlight theme={theme} />
-              </Card>
-            </React.Fragment>)}
 
-            {/* ── MORTGAGE ── */}
-            {tab === "mortgage" && (<React.Fragment>
-              <Card title="Mortgage Calculator" subtitle={`Rate pre-filled at ${MARKET_RATE}% — best 5-yr fixed, May 2026 (HomeOwners Alliance / L&C). Adjust to your quote.`} theme={theme}>
-                <SliderInput label="Interest Rate" value={mortgageRate} onChange={setMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" theme={theme} />
-                <SliderInput label="Term" value={mortgageTerm} onChange={setMortgageTerm} min={5} max={40} step={1} prefix="" suffix=" years" theme={theme} />
-              </Card>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 13 }}>
-                <Card title="Monthly Repayment" theme={theme}>
-                  <div style={{ textAlign: "center", padding: "12px 0" }}>
-                    <div style={{ fontSize: 10, color: muted, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>Monthly Payment</div>
-                    <div style={{ fontSize: 34, fontFamily: "'Georgia', serif", color: "#c9a96e", fontWeight: 700 }}>{fmt(mortgage.monthly)}</div>
-                    <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>{fmtPct(mortgageRate)} · {mortgageTerm} years</div>
-                  </div>
-                  <CostRow label="Loan Amount" value={mortgageLoan} theme={theme} />
-                  <CostRow label="Total Repaid" value={mortgage.total} theme={theme} />
-                  <CostRow label="Total Interest" value={mortgage.interest} theme={theme} />
-                </Card>
-                <Card title="Rate Sensitivity" subtitle="What your payment becomes if rates move" theme={theme}>
-                  {[-1, -0.5, 0, 0.5, 1].map(delta => {
-                    const m = calcMortgage(mortgageLoan, mortgageRate + delta, mortgageTerm);
-                    const diff = m.monthly - mortgage.monthly;
-                    return (
-                      <div key={delta} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${border}`, fontSize: 12 }}>
-                        <span style={{ color: muted }}>{delta === 0 ? "Your rate" : (delta > 0 ? "+" : "") + delta + "%"} ({fmtPct(mortgageRate + delta)})</span>
-                        <span style={{ fontWeight: 600, color: delta === 0 ? "#c9a96e" : diff > 0 ? red : green }}>{delta === 0 ? fmt(mortgage.monthly) : (diff > 0 ? "+" : "") + fmt(diff) + "/mo"}</span>
+                  <div className="cr-grid-2">
+                    <Card title="Where your cash goes" subtitle="Total cash needed to buy" accent="var(--clay)">
+                      <div className="cr-donut-layout">
+                        <Donut segments={costSegments} centerLabel="Total needed" centerValue={fmt(totalCashNeeded)} />
+                        <Legend segments={costSegments} />
                       </div>
-                    );
-                  })}
-                  <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 8, background: d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: muted, lineHeight: 1.6 }}>
-                    <strong style={{ color: "#c9a96e" }}>Lender stress test:</strong> at {fmtPct(mortgageRate + STRESS_DELTA)} your payment would be {fmt(stressMortgage.monthly)}/mo. Lenders check you could still afford this.
+                    </Card>
+                    <Card title="Cash Available" accent="var(--sage)">
+                      {hasSale && (<React.Fragment>
+                        <CostRow label="Sale Price" value={salePrice} />
+                        <CostRow label="Agent Fee" value={-agentFeeTotal} sub={`${agentFeePct}%${agentFeeVAT ? " +VAT" : ""}`} />
+                        <CostRow label="Solicitor (sale)" value={-sellerSolicitorFee} />
+                        <CostRow label="Mortgage Repaid" value={-existingMortgage} />
+                        <CostRow label="Net from Sale" value={netSaleProceeds} highlight />
+                        <div style={{ height: 8 }} />
+                      </React.Fragment>)}
+                      <CostRow label="Savings" value={savings} />
+                      <CostRow label="TOTAL AVAILABLE" value={cashAvailable} highlight />
+                    </Card>
                   </div>
-                </Card>
-              </div>
-              <Card title="Affordability Check" subtitle="Optional — enter your household income to sanity-check the loan size" theme={theme}>
-                <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 5 }}>Gross annual household income</label>
-                    <MoneyInput value={income} onChange={setIncome} placeholder="e.g. 85,000" theme={theme} />
-                  </div>
-                  {income > 0 && (
-                    <div style={{ flex: 1, minWidth: 200, padding: "11px 14px", borderRadius: 9, background: lti <= LTI_CAP ? (d ? "rgba(22,163,74,0.07)" : "rgba(110,201,154,0.08)") : (d ? "rgba(220,38,38,0.06)" : "rgba(224,123,106,0.08)"), border: `1px solid ${lti <= LTI_CAP ? "rgba(110,201,154,0.25)" : "rgba(224,123,106,0.25)"}` }}>
-                      <div style={{ fontSize: 11, color: muted, marginBottom: 2 }}>Loan-to-income</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Georgia', serif", color: lti <= LTI_CAP ? green : red }}>{lti.toFixed(1)}×</div>
-                      <div style={{ fontSize: 10, color: muted, marginTop: 2 }}>{lti <= LTI_CAP ? `Within the typical ~${LTI_CAP}× lender ceiling` : `Above the typical ~${LTI_CAP}× ceiling — most lenders would cap your loan at ${fmt(income * LTI_CAP)}`}</div>
-                    </div>
+
+                  {lti !== null && lti > LTI_CAP && (
+                    <div className="cr-alert">Heads-up: your loan is {lti.toFixed(1)}× your income — most lenders cap at ~{LTI_CAP}×. See the Mortgage tab.</div>
                   )}
-                </div>
-              </Card>
-            </React.Fragment>)}
 
-            {/* ── STAMP DUTY ── */}
-            {tab === "stampduty" && (<React.Fragment>
-              <Card title="Stamp Duty Land Tax" subtitle="England & NI · Post 1 April 2025 · HMRC rates" theme={theme}>
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Buyer type — set from your journey, adjustable here</div>
-                  <PillToggle options={[{ value: "standard", label: "Standard" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional (+5%)" }]} value={buyerType} onChange={setBuyerType} theme={theme} />
-                </div>
-                <SliderInput label="Property Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} theme={theme} />
-              </Card>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 13 }}>
-                <Card title="Your Band Breakdown" accent="#7eb8b0" theme={theme}>
-                  {sdlt.bands.length === 0 && <div style={{ fontSize: 12, color: muted, padding: "8px 0" }}>No stamp duty due at this price.</div>}
-                  {sdlt.bands.map((b, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${border}` }}>
-                      <span style={{ fontSize: 11, color: muted, width: 150, flexShrink: 0 }}>{b.label}</span>
-                      <div style={{ flex: 1, height: 4, background: d ? "#e0ddd8" : "#2a2a38", borderRadius: 2 }}>
-                        <div style={{ height: "100%", width: `${sdlt.total > 0 ? Math.min(100, b.tax / sdlt.total * 100) : 0}%`, background: "#7eb8b0", borderRadius: 2 }} />
-                      </div>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: "#7eb8b0", width: 30, textAlign: "right" }}>{b.rate}%</span>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: text, width: 70, textAlign: "right" }}>{fmt(b.tax)}</span>
-                    </div>
-                  ))}
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "11px 0 0", borderTop: `1px solid ${border}`, marginTop: 6 }}>
-                    <span style={{ fontWeight: 600, fontSize: 12, color: text }}>Total SDLT</span>
-                    <span style={{ fontWeight: 700, fontSize: 16, color: "#c9a96e", fontFamily: "'Georgia', serif" }}>{fmt(sdlt.total)}</span>
+                  <div className="cr-note cr-note-wide">
+                    <strong>SDLT (England &amp; NI, post April 2025):</strong> 0% to £125k · 2% to £250k · 5% to £925k · 10% to £1.5m · 12% above. First-time buyers: 0% to £300k (relief up to £500k). Additional property: +5% on every band.
                   </div>
-                  <div style={{ fontSize: 10, color: muted, marginTop: 8 }}>Effective rate: {offerPrice > 0 ? fmtPct(sdlt.total / offerPrice * 100) : "0%"} of purchase price · Due within 14 days of completion</div>
-                </Card>
-                <Card title="Rate Tables" theme={theme}>
-                  <div style={{ fontSize: 10, color: muted, marginBottom: 8 }}>Standard residential</div>
-                  {[["£0 – £125,000","0%"],["£125,001 – £250,000","2%"],["£250,001 – £925,000","5%"],["£925,001 – £1,500,000","10%"],["Above £1,500,000","12%"]].map(([b,r]) => (
-                    <div key={b} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${border}`, fontSize: 11 }}>
-                      <span style={{ color: muted }}>{b}</span><span style={{ fontWeight: 600, color: "#7eb8b0" }}>{r}</span>
-                    </div>
-                  ))}
-                  <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 8, background: d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.07)", border: "1px solid rgba(201,169,110,0.2)", fontSize: 11, color: muted, lineHeight: 1.7 }}>
-                    <strong style={{ color: "#c9a96e" }}>First-time buyers:</strong> 0% to £300k, 5% on £300k–£500k. No relief above £500k.<br />
-                    <strong style={{ color: "#c9a96e" }}>Additional property:</strong> +5% surcharge on every band.
-                  </div>
-                </Card>
-              </div>
-            </React.Fragment>)}
+                  <button onClick={() => setStage("details")} className="cr-link cr-edit-link">← Edit my numbers</button>
+                </React.Fragment>)}
 
-            {/* ── SCENARIOS ── */}
-            {tab === "scenario" && (<React.Fragment>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontFamily: "'Georgia', serif", fontSize: 14, color: text }}>Stress-test your position</div>
-                  <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>Move the levers — your base case stays untouched</div>
-                </div>
-                <button onClick={() => setScen({ offerPrice, salePrice, depositPct, rate: mortgageRate })} style={{ fontSize: 11, color: muted, background: "none", border: `1px solid ${border}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit" }}>Reset to base</button>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 10 }}>
-                <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Offer Price</div>
-                  <SliderInput value={scen.offerPrice} onChange={v => setScen(p => ({ ...p, offerPrice: v }))} min={Math.max(50000, offerPrice - 250000)} max={offerPrice + 300000} step={5000} theme={theme} />
-                  <div style={{ fontSize: 11, color: muted }}>Deposit {fmt(sDeposit)} · SDLT {fmt(sSDLT.total)}</div>
-                </div>
-                {hasSale && (
-                  <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
-                    <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Sale Price</div>
-                    <SliderInput value={scen.salePrice} onChange={v => setScen(p => ({ ...p, salePrice: v }))} min={Math.max(50000, salePrice - 200000)} max={salePrice + 200000} step={5000} theme={theme} />
-                    <div style={{ fontSize: 11, color: muted }}>Net proceeds {fmt(sNetSale)}</div>
-                  </div>
-                )}
-                <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Deposit %</div>
-                  <SliderInput value={scen.depositPct} onChange={v => setScen(p => ({ ...p, depositPct: v }))} min={5} max={60} step={1} prefix="" suffix="%" theme={theme} />
-                  <div style={{ fontSize: 11, color: muted }}>{fmt(sDeposit)} · LTV {fmtPct(100 - scen.depositPct)}</div>
-                </div>
-                <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Mortgage Rate</div>
-                  <SliderInput value={scen.rate} onChange={v => setScen(p => ({ ...p, rate: v }))} min={1} max={10} step={0.05} prefix="" suffix="%" theme={theme} />
-                  <div style={{ fontSize: 11, color: muted }}>{fmt(sMortgage.monthly)}/mo</div>
-                </div>
-              </div>
-
-              <div style={{ background: surface, border: `1px solid ${border}`, borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ padding: "11px 15px", borderBottom: `1px solid ${border}`, fontSize: 10, color: muted, textTransform: "uppercase", letterSpacing: "0.5px" }}>What this means for you</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
-                  {[
-                    { label: "Base Case", val: surplus, sub: fmt(mortgage.monthly) + "/mo" },
-                    { label: "Your Scenario", val: sSurplus, sub: fmt(sMortgage.monthly) + "/mo", hl: true },
-                    { label: "Change", val: sSurplus - surplus, sub: (sMortgage.monthly > mortgage.monthly ? "+" : "") + fmt(sMortgage.monthly - mortgage.monthly) + "/mo" },
-                  ].map(({ label, val, sub, hl }) => (
-                    <div key={label} style={{ padding: "16px 14px", textAlign: "center", background: hl ? (d ? "rgba(201,169,110,0.06)" : "rgba(201,169,110,0.05)") : "transparent", borderRight: `1px solid ${border}` }}>
-                      <div style={{ fontSize: 10, color: hl ? "#c9a96e" : muted, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 7 }}>{label}</div>
-                      <div style={{ fontSize: 22, fontFamily: "'Georgia', serif", fontWeight: 700, color: val >= 0 ? green : red }}>{val >= 0 ? "+" : ""}{fmt(val)}</div>
-                      <div style={{ fontSize: 10, color: muted, marginTop: 4 }}>{sub}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ padding: "10px 15px" }}>
-                  {[
-                    { label: "Total Cash Needed", base: totalCashNeeded, s: sNeeded, lb: true },
-                    { label: "Total Cash Available", base: cashAvailable, s: sAvailable, lb: false },
-                    { label: "Deposit", base: depositAmount, s: sDeposit, lb: true },
-                    { label: "Stamp Duty", base: sdlt.total, s: sSDLT.total, lb: true },
-                    { label: "Monthly Mortgage", base: mortgage.monthly, s: sMortgage.monthly, lb: true },
-                  ].map(({ label, base, s, lb }) => {
-                    const diff = s - base;
-                    const good = lb ? diff <= 0 : diff >= 0;
-                    const c = diff === 0 ? muted : good ? green : red;
-                    return (
-                      <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${border}` }}>
-                        <span style={{ fontSize: 12, color: muted }}>{label}</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                          <span style={{ fontSize: 11, color: muted }}>{fmt(base)}</span>
-                          <span style={{ fontSize: 11, color: muted }}>→</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: text }}>{fmt(s)}</span>
-                          <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: c + "22", color: c }}>{diff === 0 ? "No change" : (diff > 0 ? "+" : "") + fmt(diff)}</span>
+                {/* PURCHASE */}
+                {tab === "purchase" && (<React.Fragment>
+                  <Card title="Purchase Details">
+                    <SliderInput label="Offer / Purchase Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} />
+                    <SliderInput label="Deposit" value={depositPct} onChange={setDepositPct} min={5} max={60} step={1} prefix="" suffix="%" />
+                  </Card>
+                  <div className="cr-grid-2">
+                    <Card title="Deposit & Loan">
+                      <CostRow label="Offer Price" value={offerPrice} />
+                      <CostRow label="Deposit" value={depositAmount} sub={`${depositPct}%`} />
+                      <CostRow label="Mortgage Required" value={mortgageLoan} highlight />
+                      <div style={{ marginTop: 14 }}>
+                        <div className="cr-hint">Loan-to-value: {fmtPct(ltv)}</div>
+                        <div className="cr-bar"><div className="cr-bar-fill" style={{ width: `${Math.min(100, ltv)}%` }} /></div>
+                        <div className="cr-hint" style={{ marginTop: 4 }}>
+                          {ltv > 90 ? "Above 90% LTV — fewer products, higher rates" : ltv > 75 ? "75–90% LTV — mainstream territory" : "Below 75% LTV — access to the best rates"}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    </Card>
+                    <Card title="Buying Costs" subtitle="Adjust to match your quotes">
+                      <NumInput label="Solicitor / conveyancing (£)" value={buyerSolicitorFee} onChange={setBuyerSolicitorFee} />
+                      <NumInput label="Survey (£)" value={surveyFee} onChange={setSurveyFee} />
+                      <NumInput label="Mortgage arrangement (£)" value={mortgageArrangement} onChange={setMortgageArrangement} />
+                      <NumInput label="Removals (£)" value={removals} onChange={setRemovals} />
+                      <NumInput label="Other (£)" value={otherCosts} onChange={setOtherCosts} />
+                    </Card>
+                  </div>
+                  {!hasSale && <Card title="Savings"><NumInput label="Savings available (£)" value={savings} onChange={setSavings} /></Card>}
+                </React.Fragment>)}
+
+                {/* SALE */}
+                {tab === "sale" && hasSale && (<React.Fragment>
+                  <Card title="Your Current Property Sale">
+                    <SliderInput label="Expected Sale Price" value={salePrice} onChange={setSalePrice} min={100000} max={2000000} step={5000} />
+                    <SliderInput label="Existing Mortgage" value={existingMortgage} onChange={setExistingMortgage} min={0} max={Math.max(100000, salePrice)} step={5000} hint={`Equity: ${fmt(saleEquity)}`} />
+                    <SliderInput label="Agent Fee" value={agentFeePct} onChange={setAgentFeePct} min={0.5} max={3.5} step={0.1} prefix="" suffix="%" hint="Typical UK: 1.0–2.0% + VAT" />
+                    <div className="cr-toggle-row">
+                      <span className="cr-hint" style={{ margin: 0 }}>Agent fee includes VAT (20%)</span>
+                      <button onClick={() => setAgentFeeVAT(v => !v)} className={"cr-switch" + (agentFeeVAT ? " cr-switch-on" : "")}><span /></button>
+                    </div>
+                    <div style={{ marginTop: 12 }}>
+                      <NumInput label="Solicitor — sale side (£)" value={sellerSolicitorFee} onChange={setSellerSolicitorFee} />
+                      <NumInput label="Additional savings (£)" value={savings} onChange={setSavings} />
+                    </div>
+                  </Card>
+                  <Card title="Sale Proceeds Breakdown">
+                    <CostRow label="Gross Sale Price" value={salePrice} />
+                    <CostRow label="Agent Fee (excl VAT)" value={-agentFeeBase} sub={`${agentFeePct}%`} />
+                    {agentFeeVAT && <CostRow label="VAT on Agent Fee" value={-(agentFeeTotal - agentFeeBase)} />}
+                    <CostRow label="Solicitor (sale)" value={-sellerSolicitorFee} />
+                    <CostRow label="Mortgage Repaid" value={-existingMortgage} />
+                    <CostRow label="Net Cash from Sale" value={netSaleProceeds} highlight />
+                  </Card>
+                </React.Fragment>)}
+
+                {/* MORTGAGE */}
+                {tab === "mortgage" && (<React.Fragment>
+                  <Card title="Mortgage Calculator" subtitle={`Rate pre-filled at ${MARKET_RATE}% — best 5-yr fixed, May 2026 (HomeOwners Alliance / L&C). Adjust to your quote.`}>
+                    <SliderInput label="Interest Rate" value={mortgageRate} onChange={setMortgageRate} min={1} max={10} step={0.05} prefix="" suffix="%" />
+                    <SliderInput label="Term" value={mortgageTerm} onChange={setMortgageTerm} min={5} max={40} step={1} prefix="" suffix=" years" />
+                  </Card>
+                  <div className="cr-grid-2">
+                    <Card title="Monthly Repayment">
+                      <div className="cr-bignum">
+                        <div className="cr-bignum-label">Monthly Payment</div>
+                        <div className="cr-bignum-val">{fmt(mortgage.monthly)}</div>
+                        <div className="cr-hint" style={{ textAlign: "center" }}>{fmtPct(mortgageRate)} · {mortgageTerm} years</div>
+                      </div>
+                      <CostRow label="Loan Amount" value={mortgageLoan} />
+                      <CostRow label="Total Repaid" value={mortgage.total} />
+                      <CostRow label="Total Interest" value={mortgage.interest} />
+                    </Card>
+                    <Card title="Rate Sensitivity" subtitle="What your payment becomes if rates move">
+                      {[-1, -0.5, 0, 0.5, 1].map(delta => {
+                        const m = calcMortgage(mortgageLoan, mortgageRate + delta, mortgageTerm);
+                        const diff = m.monthly - mortgage.monthly;
+                        return (
+                          <div key={delta} className="cr-row">
+                            <span className="cr-row-label">{delta === 0 ? "Your rate" : (delta > 0 ? "+" : "") + delta + "%"} ({fmtPct(mortgageRate + delta)})</span>
+                            <span className={"cr-row-val " + (delta === 0 ? "cr-accent" : diff > 0 ? "cr-neg" : "cr-pos")}>{delta === 0 ? fmt(mortgage.monthly) : (diff > 0 ? "+" : "") + fmt(diff) + "/mo"}</span>
+                          </div>
+                        );
+                      })}
+                      <div className="cr-note" style={{ marginTop: 12 }}><strong>Lender stress test:</strong> at {fmtPct(mortgageRate + STRESS_DELTA)} your payment would be {fmt(stressMortgage.monthly)}/mo. Lenders check you could still afford this.</div>
+                    </Card>
+                  </div>
+                  <Card title="Affordability Check" subtitle="Optional — enter your household income to sanity-check the loan size">
+                    <div className="cr-afford">
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <label className="cr-field-label">Gross annual household income</label>
+                        <MoneyInput value={income} onChange={setIncome} placeholder="e.g. 85,000" />
+                      </div>
+                      {income > 0 && (
+                        <div className={"cr-lti " + (lti <= LTI_CAP ? "cr-lti-ok" : "cr-lti-warn")}>
+                          <div className="cr-hint" style={{ margin: 0 }}>Loan-to-income</div>
+                          <div className="cr-lti-val">{lti.toFixed(1)}×</div>
+                          <div className="cr-hint" style={{ margin: 0 }}>{lti <= LTI_CAP ? `Within the typical ~${LTI_CAP}× lender ceiling` : `Above the typical ~${LTI_CAP}× ceiling — most lenders would cap your loan at ${fmt(income * LTI_CAP)}`}</div>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </React.Fragment>)}
+
+                {/* STAMP DUTY */}
+                {tab === "stampduty" && (<React.Fragment>
+                  <Card title="Stamp Duty Land Tax" subtitle="England & NI · Post 1 April 2025 · HMRC rates">
+                    <div style={{ marginBottom: 14 }}>
+                      <div className="cr-hint">Buyer type — set from your journey, adjustable here</div>
+                      <PillToggle options={[{ value: "standard", label: "Standard" },{ value: "firstTime", label: "First-Time Buyer" },{ value: "additional", label: "Additional (+5%)" }]} value={buyerType} onChange={setBuyerType} />
+                    </div>
+                    <SliderInput label="Property Price" value={offerPrice} onChange={setOfferPrice} min={100000} max={3000000} step={5000} />
+                  </Card>
+                  <div className="cr-grid-2">
+                    <Card title="Your Band Breakdown" accent="var(--sage)">
+                      {sdlt.bands.length === 0 && <div className="cr-hint" style={{ padding: "8px 0" }}>No stamp duty due at this price.</div>}
+                      {sdlt.bands.map((b, i) => (
+                        <div key={i} className="cr-band">
+                          <span className="cr-band-label">{b.label}</span>
+                          <div className="cr-band-bar"><div className="cr-band-fill" style={{ width: `${sdlt.total > 0 ? Math.min(100, b.tax / sdlt.total * 100) : 0}%` }} /></div>
+                          <span className="cr-band-rate">{b.rate}%</span>
+                          <span className="cr-band-tax">{fmt(b.tax)}</span>
+                        </div>
+                      ))}
+                      <div className="cr-row cr-row-hl" style={{ marginTop: 6 }}>
+                        <span className="cr-row-label">Total SDLT</span>
+                        <span className="cr-row-val cr-accent" style={{ fontSize: 18 }}>{fmt(sdlt.total)}</span>
+                      </div>
+                      <div className="cr-hint" style={{ marginTop: 8 }}>Effective rate: {offerPrice > 0 ? fmtPct(sdlt.total / offerPrice * 100) : "0%"} of purchase price · Due within 14 days of completion</div>
+                    </Card>
+                    <Card title="Rate Tables">
+                      <div className="cr-hint">Standard residential</div>
+                      {[["£0 – £125,000","0%"],["£125,001 – £250,000","2%"],["£250,001 – £925,000","5%"],["£925,001 – £1,500,000","10%"],["Above £1,500,000","12%"]].map(([b,r]) => (
+                        <div key={b} className="cr-row"><span className="cr-row-label">{b}</span><span className="cr-row-val cr-sage">{r}</span></div>
+                      ))}
+                      <div className="cr-note" style={{ marginTop: 12 }}>
+                        <strong>First-time buyers:</strong> 0% to £300k, 5% on £300k–£500k. No relief above £500k.<br />
+                        <strong>Additional property:</strong> +5% surcharge on every band.
+                      </div>
+                    </Card>
+                  </div>
+                </React.Fragment>)}
+
+                {/* SCENARIOS */}
+                {tab === "scenario" && (<React.Fragment>
+                  <div className="cr-scen-head">
+                    <div>
+                      <div className="cr-card-title">Stress-test your position</div>
+                      <div className="cr-hint" style={{ marginTop: 2 }}>Move the levers — your base case stays untouched</div>
+                    </div>
+                    <button onClick={() => setScen({ offerPrice, salePrice, depositPct, rate: mortgageRate })} className="cr-link cr-reset">Reset to base</button>
+                  </div>
+                  <div className="cr-scen-grid">
+                    <div className="cr-scen-lever">
+                      <div className="cr-lever-label">Offer Price</div>
+                      <SliderInput value={scen.offerPrice} onChange={v => setScen(p => ({ ...p, offerPrice: v }))} min={Math.max(50000, offerPrice - 250000)} max={offerPrice + 300000} step={5000} />
+                      <div className="cr-hint" style={{ margin: 0 }}>Deposit {fmt(sDeposit)} · SDLT {fmt(sSDLT.total)}</div>
+                    </div>
+                    {hasSale && (
+                      <div className="cr-scen-lever">
+                        <div className="cr-lever-label">Sale Price</div>
+                        <SliderInput value={scen.salePrice} onChange={v => setScen(p => ({ ...p, salePrice: v }))} min={Math.max(50000, salePrice - 200000)} max={salePrice + 200000} step={5000} />
+                        <div className="cr-hint" style={{ margin: 0 }}>Net proceeds {fmt(sNetSale)}</div>
+                      </div>
+                    )}
+                    <div className="cr-scen-lever">
+                      <div className="cr-lever-label">Deposit %</div>
+                      <SliderInput value={scen.depositPct} onChange={v => setScen(p => ({ ...p, depositPct: v }))} min={5} max={60} step={1} prefix="" suffix="%" />
+                      <div className="cr-hint" style={{ margin: 0 }}>{fmt(sDeposit)} · LTV {fmtPct(100 - scen.depositPct)}</div>
+                    </div>
+                    <div className="cr-scen-lever">
+                      <div className="cr-lever-label">Mortgage Rate</div>
+                      <SliderInput value={scen.rate} onChange={v => setScen(p => ({ ...p, rate: v }))} min={1} max={10} step={0.05} prefix="" suffix="%" />
+                      <div className="cr-hint" style={{ margin: 0 }}>{fmt(sMortgage.monthly)}/mo</div>
+                    </div>
+                  </div>
+
+                  <div className="cr-card">
+                    <div className="cr-scen-summary-head">What this means for you</div>
+                    <div className="cr-scen-3col">
+                      {[
+                        { label: "Base Case", val: surplus, sub: fmt(mortgage.monthly) + "/mo" },
+                        { label: "Your Scenario", val: sSurplus, sub: fmt(sMortgage.monthly) + "/mo", hl: true },
+                        { label: "Change", val: sSurplus - surplus, sub: (sMortgage.monthly > mortgage.monthly ? "+" : "") + fmt(sMortgage.monthly - mortgage.monthly) + "/mo" },
+                      ].map(({ label, val, sub, hl }) => (
+                        <div key={label} className={"cr-scen-col" + (hl ? " cr-scen-col-hl" : "")}>
+                          <div className="cr-scen-col-label">{label}</div>
+                          <div className={"cr-scen-col-val " + (val >= 0 ? "cr-pos" : "cr-neg")}>{val >= 0 ? "+" : ""}{fmt(val)}</div>
+                          <div className="cr-hint" style={{ margin: 0 }}>{sub}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="cr-card-body">
+                      {[
+                        { label: "Total Cash Needed", base: totalCashNeeded, s: sNeeded, lb: true },
+                        { label: "Total Cash Available", base: cashAvailable, s: sAvailable, lb: false },
+                        { label: "Deposit", base: depositAmount, s: sDeposit, lb: true },
+                        { label: "Stamp Duty", base: sdlt.total, s: sSDLT.total, lb: true },
+                        { label: "Monthly Mortgage", base: mortgage.monthly, s: sMortgage.monthly, lb: true },
+                      ].map(({ label, base, s, lb }) => {
+                        const diff = s - base;
+                        const good = lb ? diff <= 0 : diff >= 0;
+                        const cls = diff === 0 ? "cr-muted" : good ? "cr-pos" : "cr-neg";
+                        return (
+                          <div key={label} className="cr-row">
+                            <span className="cr-row-label">{label}</span>
+                            <div className="cr-scen-delta">
+                              <span className="cr-row-sub">{fmt(base)}</span>
+                              <span className="cr-row-sub">→</span>
+                              <span className="cr-row-val">{fmt(s)}</span>
+                              <span className={"cr-chip " + cls}>{diff === 0 ? "No change" : (diff > 0 ? "+" : "") + fmt(diff)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </React.Fragment>)}
               </div>
-            </React.Fragment>)}
+            </div>
+          )}
 
-          </div>
+          {/* TWEAKS */}
+          <TweaksPanel>
+            <TweakSection label="Design direction" />
+            <TweakRadio label="Direction" value={t.direction} options={[{value:"savoy",label:"Savoy"},{value:"monogram",label:"Monogram"}]} onChange={v => setTweak("direction", v)} />
+            <TweakSection label="Detailing" />
+            <TweakColor label="Accent" value={t.accent} options={["#c8a24a","#c98a5e","#7fae9e","#c5bca6"]} onChange={v => setTweak("accent", v)} />
+            <TweakToggle label="Deco ornaments" value={t.ornaments} onChange={v => setTweak("ornaments", v)} />
+          </TweaksPanel>
         </div>
-      )}
-    </div>
-  );
-}
+      );
+    }
 
-const container = document.getElementById('root');
-const root = ReactDOM.createRoot(container);
-root.render(React.createElement(App));
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
   </script>
 </body>
 </html>
