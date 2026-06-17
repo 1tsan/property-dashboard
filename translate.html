@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Translation — Fasanya</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #c9a96e;
+      --gold-light: #e8d5b0;
+      --bg: #0d0d0d;
+      --surface: #141414;
+      --surface2: #1c1c1c;
+      --border: #2a2a2a;
+      --text: #e8e0d4;
+      --muted: #7a7065;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      transition: color 0.2s;
+    }
+
+    header a:hover { color: var(--gold); }
+    .divider { color: var(--border); }
+
+    header h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 400;
+      letter-spacing: 0.06em;
+      color: var(--gold);
+    }
+
+    /* ── Language Bar ── */
+    .lang-bar {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 40px;
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      background: var(--surface);
+    }
+
+    .lang-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      max-width: 240px;
+    }
+
+    .lang-label {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .lang-field select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      padding: 10px 36px 10px 14px;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237a7065' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      transition: border-color 0.2s;
+    }
+
+    .lang-field select:focus { outline: none; border-color: var(--gold); }
+
+    .swap-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--muted);
+      font-size: 18px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .swap-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+    /* ── Main Layout ── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      max-width: 1280px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 40px;
+    }
+
+    /* ── Panel ── */
+    .panel, .output-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .panel-label {
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Tabs ── */
+    .tab-bar {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      width: fit-content;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 9px 20px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .tab-btn + .tab-btn { border-left: 1px solid var(--border); }
+    .tab-btn.active { background: var(--gold); color: #0d0d0d; font-weight: 500; }
+    .tab-btn:not(.active):hover { color: var(--text); }
+
+    /* ── Tab Content ── */
+    .tab-content { display: none; flex-direction: column; gap: 12px; flex: 1; }
+    .tab-content.active { display: flex; }
+
+    /* ── Textarea ── */
+    #text-input {
+      flex: 1;
+      min-height: 340px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--text);
+      resize: vertical;
+      transition: border-color 0.2s;
+    }
+
+    #text-input:focus { outline: none; border-color: var(--gold); }
+    #text-input::placeholder { color: var(--muted); font-style: italic; }
+
+    .input-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    /* ── Drop Zone ── */
+    #drop-zone {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 52px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    #drop-zone.drag-over { border-color: var(--gold); background: #181510; }
+
+    #drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-icon { font-size: 30px; margin-bottom: 14px; opacity: 0.4; }
+
+    .drop-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 300;
+      margin-bottom: 8px;
+    }
+
+    .drop-sub { font-size: 12px; color: var(--muted); line-height: 1.7; }
+
+    /* ── File Info ── */
+    #file-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 13px;
+    }
+
+    .file-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gold);
+      flex-shrink: 0;
+    }
+
+    #file-name-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #file-size-text { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+
+    .clear-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      line-height: 1;
+      transition: color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .clear-btn:hover { color: var(--text); }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      padding: 12px 26px;
+      background: var(--gold);
+      color: #0d0d0d;
+      border: none;
+      border-radius: var(--radius);
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+      flex-shrink: 0;
+    }
+
+    .btn-primary:hover { background: var(--gold-light); }
+    .btn-primary:disabled { opacity: 0.4; cursor: default; }
+
+    .btn-outline {
+      padding: 7px 16px;
+      background: transparent;
+      color: var(--gold);
+      border: 1px solid var(--gold);
+      border-radius: var(--radius);
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .btn-outline:hover { background: var(--gold); color: #0d0d0d; }
+
+    /* ── Progress ── */
+    #progress-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    #progress-label { font-size: 12px; color: var(--muted); }
+
+    #progress-bar-bg {
+      height: 2px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--gold);
+      transition: width 0.35s ease;
+      border-radius: 2px;
+    }
+
+    /* ── Output ── */
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .output-actions { display: flex; gap: 8px; }
+
+    #output {
+      flex: 1;
+      min-height: 400px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-y: auto;
+      resize: vertical;
+    }
+
+    #output:empty::before {
+      content: 'Translation will appear here…';
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .output-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 18px;
+    }
+
+    .char-count { font-size: 11px; color: var(--muted); }
+
+    .api-note {
+      font-size: 11px;
+      color: #3a3530;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Utility ── */
+    .hidden { display: none !important; }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; padding: 28px 20px; }
+      header, .lang-bar { padding: 16px 20px; }
+      .lang-field { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/">Fasanya</a>
+  <span class="divider">/</span>
+  <h1>Translation</h1>
+</header>
+
+<div class="lang-bar">
+  <div class="lang-field">
+    <span class="lang-label">From</span>
+    <select id="from-lang" aria-label="Source language"></select>
+  </div>
+
+  <button class="swap-btn" id="swap-btn" title="Swap languages" aria-label="Swap languages">⇄</button>
+
+  <div class="lang-field">
+    <span class="lang-label">To</span>
+    <select id="to-lang" aria-label="Target language"></select>
+  </div>
+</div>
+
+<main>
+  <!-- ── Input Panel ── -->
+  <div class="panel">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="text">Text</button>
+      <button class="tab-btn" data-tab="document">Document</button>
+    </div>
+
+    <!-- Text tab -->
+    <div class="tab-content active" id="tab-text">
+      <textarea id="text-input" placeholder="Paste or type text to translate…" rows="14"></textarea>
+      <div class="input-footer">
+        <span class="char-count" id="input-char-count">0 characters</span>
+        <button class="btn-primary" id="translate-text-btn">Translate</button>
+      </div>
+    </div>
+
+    <!-- Document tab -->
+    <div class="tab-content" id="tab-document">
+      <div id="drop-zone">
+        <input type="file" id="file-input" accept=".pdf,.doc,.docx,.html,.htm,.txt" />
+        <div class="drop-icon">⬆</div>
+        <div class="drop-title">Drop your document here</div>
+        <div class="drop-sub">or click to browse<br>PDF · DOCX · DOC · HTML · TXT</div>
+      </div>
+
+      <div id="file-info" class="hidden">
+        <span id="file-type-badge" class="file-badge"></span>
+        <span id="file-name-text"></span>
+        <span id="file-size-text"></span>
+        <button class="clear-btn" id="clear-file-btn" aria-label="Remove file">✕</button>
+      </div>
+
+      <button class="btn-primary hidden" id="translate-doc-btn">Translate Document</button>
+    </div>
+
+    <!-- Progress bar (shared) -->
+    <div id="progress-wrap" class="hidden">
+      <div id="progress-label">Preparing…</div>
+      <div id="progress-bar-bg"><div id="progress-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- ── Output Panel ── -->
+  <div class="output-panel">
+    <div class="output-header">
+      <span class="panel-label">Translation</span>
+      <div class="output-actions">
+        <button class="btn-outline hidden" id="copy-btn">Copy</button>
+        <button class="btn-outline hidden" id="download-btn">Download</button>
+      </div>
+    </div>
+
+    <div id="output" role="region" aria-label="Translated text" aria-live="polite"></div>
+
+    <div class="output-footer">
+      <span class="char-count hidden" id="output-char-count"></span>
+      <span class="api-note">Powered by MyMemory</span>
+    </div>
+  </div>
+</main>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // ── Language catalogue ──────────────────────────────────────────────────────
+  const LANGUAGES = [
+    { code: 'SQ', name: 'Albanian' },
+    { code: 'BG', name: 'Bulgarian' },
+    { code: 'CA', name: 'Catalan' },
+    { code: 'HR', name: 'Croatian' },
+    { code: 'CS', name: 'Czech' },
+    { code: 'DA', name: 'Danish' },
+    { code: 'NL', name: 'Dutch' },
+    { code: 'EN', name: 'English' },
+    { code: 'ET', name: 'Estonian' },
+    { code: 'FI', name: 'Finnish' },
+    { code: 'FR', name: 'French' },
+    { code: 'DE', name: 'German' },
+    { code: 'EL', name: 'Greek' },
+    { code: 'HU', name: 'Hungarian' },
+    { code: 'IS', name: 'Icelandic' },
+    { code: 'GA', name: 'Irish' },
+    { code: 'IT', name: 'Italian' },
+    { code: 'LV', name: 'Latvian' },
+    { code: 'LT', name: 'Lithuanian' },
+    { code: 'MK', name: 'Macedonian' },
+    { code: 'MT', name: 'Maltese' },
+    { code: 'NO', name: 'Norwegian' },
+    { code: 'PL', name: 'Polish' },
+    { code: 'PT', name: 'Portuguese' },
+    { code: 'RO', name: 'Romanian' },
+    { code: 'RU', name: 'Russian' },
+    { code: 'SR', name: 'Serbian' },
+    { code: 'SK', name: 'Slovak' },
+    { code: 'SL', name: 'Slovenian' },
+    { code: 'ES', name: 'Spanish' },
+    { code: 'SV', name: 'Swedish' },
+    { code: 'TR', name: 'Turkish' },
+    { code: 'UK', name: 'Ukrainian' },
+    { code: 'CY', name: 'Welsh' },
+  ];
+
+  const fromLangEl = document.getElementById('from-lang');
+  const toLangEl   = document.getElementById('to-lang');
+
+  LANGUAGES.forEach(l => {
+    fromLangEl.appendChild(new Option(l.name, l.code));
+    toLangEl.appendChild(new Option(l.name, l.code));
+  });
+
+  fromLangEl.value = 'EN';
+  toLangEl.value   = 'FR';
+
+  // ── Swap languages ──────────────────────────────────────────────────────────
+  document.getElementById('swap-btn').addEventListener('click', () => {
+    const tmp = fromLangEl.value;
+    fromLangEl.value = toLangEl.value;
+    toLangEl.value   = tmp;
+  });
+
+  // ── Tab switching ───────────────────────────────────────────────────────────
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ── Character counter ───────────────────────────────────────────────────────
+  const textInput      = document.getElementById('text-input');
+  const inputCharCount = document.getElementById('input-char-count');
+
+  textInput.addEventListener('input', () => {
+    const n = textInput.value.length;
+    inputCharCount.textContent = n.toLocaleString() + ' character' + (n === 1 ? '' : 's');
+  });
+
+  // ── File handling ───────────────────────────────────────────────────────────
+  const dropZone       = document.getElementById('drop-zone');
+  const fileInput      = document.getElementById('file-input');
+  const fileInfo       = document.getElementById('file-info');
+  const fileTypeBadge  = document.getElementById('file-type-badge');
+  const fileNameText   = document.getElementById('file-name-text');
+  const fileSizeText   = document.getElementById('file-size-text');
+  const translateDocBtn= document.getElementById('translate-doc-btn');
+
+  let currentFile = null;
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  document.getElementById('clear-file-btn').addEventListener('click', clearFile);
+
+  function clearFile() {
+    currentFile = null;
+    fileInfo.classList.add('hidden');
+    translateDocBtn.classList.add('hidden');
+    fileInput.value = '';
+  }
+
+  function handleFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['pdf','doc','docx','html','htm','txt'].includes(ext)) {
+      showError('Unsupported format. Please upload a PDF, DOCX, DOC, HTML, or TXT file.');
+      return;
+    }
+    currentFile = file;
+    fileTypeBadge.textContent = ext.toUpperCase();
+    fileNameText.textContent  = file.name;
+    fileSizeText.textContent  = fmtSize(file.size);
+    fileInfo.classList.remove('hidden');
+    translateDocBtn.classList.remove('hidden');
+    clearOutput();
+  }
+
+  // ── Text translation ────────────────────────────────────────────────────────
+  document.getElementById('translate-text-btn').addEventListener('click', async () => {
+    const text = textInput.value.trim();
+    if (!text) return;
+    const btn = document.getElementById('translate-text-btn');
+    btn.disabled = true;
+    clearOutput();
+    showProgress(0, 'Preparing…');
+    try {
+      await runTranslation(text, 0, 100);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ── Document translation ────────────────────────────────────────────────────
+  translateDocBtn.addEventListener('click', async () => {
+    if (!currentFile) return;
+    translateDocBtn.disabled = true;
+    clearOutput();
+    showProgress(0, 'Extracting text…');
+    try {
+      const text = await extractText(currentFile);
+      if (!text.trim()) throw new Error('No readable text found in this document.');
+      setProgress(30, 'Starting translation…');
+      await runTranslation(text, 30, 100);
+    } catch (err) {
+      showError(err.message);
+      hideProgress();
+    } finally {
+      translateDocBtn.disabled = false;
+    }
+  });
+
+  // ── Text extraction ─────────────────────────────────────────────────────────
+  async function extractText(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext === 'pdf')              return extractPdf(file);
+    if (ext === 'docx' || ext === 'doc') return extractDocx(file);
+    if (ext === 'html' || ext === 'htm') return extractHtml(file);
+    return readAsText(file); // txt
+  }
+
+  async function extractPdf(file) {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const n   = pdf.numPages;
+    const parts = [];
+
+    for (let i = 1; i <= n; i++) {
+      setProgress(5 + ((i - 1) / n) * 22, `Reading PDF page ${i} of ${n}…`);
+      const page    = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let pageText  = '';
+      let lastY     = null;
+
+      for (const item of content.items) {
+        const y = item.transform[5];
+        if (lastY !== null && Math.abs(y - lastY) > 4) pageText += '\n';
+        pageText += item.str;
+        lastY = y;
+      }
+      parts.push(n > 1 ? `[Page ${i}]\n${pageText.trim()}` : pageText.trim());
+    }
+    return parts.join('\n\n');
+  }
+
+  async function extractDocx(file) {
+    const buf    = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    return result.value;
+  }
+
+  async function extractHtml(file) {
+    const raw = await readAsText(file);
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    doc.querySelectorAll('script,style,noscript').forEach(el => el.remove());
+    return (doc.body.innerText || doc.body.textContent || '').trim();
+  }
+
+  function readAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = e => resolve(e.target.result);
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    });
+  }
+
+  // ── Translation engine ──────────────────────────────────────────────────────
+  const CHUNK_SIZE = 4000; // chars per API call
+
+  async function runTranslation(text, startPct, endPct) {
+    const from   = fromLangEl.value;
+    const to     = toLangEl.value;
+    const chunks = chunkText(text, CHUNK_SIZE);
+    const total  = chunks.length;
+    const parts  = [];
+
+    try {
+      for (let i = 0; i < total; i++) {
+        const pct = startPct + (i / total) * (endPct - startPct);
+        setProgress(pct, `Translating part ${i + 1} of ${total}…`);
+        const result = await translateChunk(chunks[i], from, to);
+        parts.push(result);
+        if (i < total - 1) await sleep(380);
+      }
+
+      const final = parts.join('\n\n');
+      const outputEl = document.getElementById('output');
+      outputEl.textContent = final;
+
+      const countEl = document.getElementById('output-char-count');
+      countEl.textContent = final.length.toLocaleString() + ' characters';
+      countEl.classList.remove('hidden');
+      document.getElementById('copy-btn').classList.remove('hidden');
+      document.getElementById('download-btn').classList.remove('hidden');
+
+      setProgress(100, 'Complete');
+      setTimeout(hideProgress, 900);
+    } catch (err) {
+      showError('Translation failed: ' + err.message);
+      hideProgress();
+      throw err;
+    }
+  }
+
+  async function translateChunk(text, from, to) {
+    const params = new URLSearchParams({ q: text, langpair: `${from}|${to}` });
+    let res;
+    try {
+      res = await fetch(`https://api.mymemory.translated.net/get?${params}`);
+    } catch {
+      throw new Error('Network error — check your connection.');
+    }
+    if (!res.ok) throw new Error(`API error (HTTP ${res.status})`);
+    const data = await res.json();
+
+    // Status 200 or 206 (partial — treat as success)
+    if (data.responseData && data.responseData.translatedText) {
+      return data.responseData.translatedText;
+    }
+    throw new Error(data.responseDetails || `API error (${data.responseStatus})`);
+  }
+
+  function chunkText(text, max) {
+    const lines  = text.split('\n');
+    const chunks = [];
+    let cur      = '';
+
+    for (const line of lines) {
+      const addition = cur ? '\n' + line : line;
+      if (cur.length + addition.length <= max) {
+        cur += addition;
+      } else {
+        if (cur) chunks.push(cur);
+        if (line.length > max) {
+          // Split long line by words
+          const words = line.split(' ');
+          let wChunk  = '';
+          for (const w of words) {
+            const wa = wChunk ? ' ' + w : w;
+            if (wChunk.length + wa.length <= max) {
+              wChunk += wa;
+            } else {
+              if (wChunk) chunks.push(wChunk);
+              wChunk = w;
+            }
+          }
+          cur = wChunk;
+        } else {
+          cur = line;
+        }
+      }
+    }
+    if (cur) chunks.push(cur);
+    return chunks.filter(c => c.trim());
+  }
+
+  // ── Progress helpers ────────────────────────────────────────────────────────
+  function showProgress(pct, label) {
+    document.getElementById('progress-wrap').classList.remove('hidden');
+    setProgress(pct, label);
+  }
+
+  function setProgress(pct, label) {
+    document.getElementById('progress-bar').style.width = Math.min(100, pct) + '%';
+    document.getElementById('progress-label').textContent = label || '';
+    document.getElementById('progress-wrap').classList.remove('hidden');
+  }
+
+  function hideProgress() {
+    document.getElementById('progress-wrap').classList.add('hidden');
+    document.getElementById('progress-bar').style.width = '0%';
+  }
+
+  // ── Output helpers ──────────────────────────────────────────────────────────
+  function clearOutput() {
+    document.getElementById('output').textContent = '';
+    document.getElementById('output-char-count').classList.add('hidden');
+    document.getElementById('copy-btn').classList.add('hidden');
+    document.getElementById('download-btn').classList.add('hidden');
+  }
+
+  function showError(msg) {
+    document.getElementById('output').textContent = '⚠  ' + msg;
+  }
+
+  // ── Copy ────────────────────────────────────────────────────────────────────
+  document.getElementById('copy-btn').addEventListener('click', () => {
+    const text = document.getElementById('output').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('copy-btn');
+      const orig = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => btn.textContent = orig, 1600);
+    });
+  });
+
+  // ── Download ────────────────────────────────────────────────────────────────
+  document.getElementById('download-btn').addEventListener('click', () => {
+    const text   = document.getElementById('output').textContent;
+    const lang   = toLangEl.options[toLangEl.selectedIndex].text.toLowerCase();
+    const blob   = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement('a');
+    a.href       = url;
+    a.download   = `translation-${lang}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ── Utils ───────────────────────────────────────────────────────────────────
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+</script>
+</body>
+</html>
