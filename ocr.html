@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Document OCR — Fasanya</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #c9a96e;
+      --gold-light: #e8d5b0;
+      --bg: #0d0d0d;
+      --surface: #141414;
+      --surface2: #1c1c1c;
+      --border: #2a2a2a;
+      --text: #e8e0d4;
+      --muted: #7a7065;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      transition: color 0.2s;
+    }
+
+    header a:hover { color: var(--gold); }
+
+    .divider { color: var(--border); }
+
+    header h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 400;
+      letter-spacing: 0.06em;
+      color: var(--gold);
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 40px;
+      gap: 32px;
+    }
+
+    /* ── Upload Panel ── */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .panel-label {
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    #drop-zone {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 60px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    #drop-zone.drag-over {
+      border-color: var(--gold);
+      background: #1a1710;
+    }
+
+    #drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-icon {
+      font-size: 36px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .drop-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .drop-sub {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── Preview ── */
+    #preview-wrap {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    #preview-wrap.visible { display: flex; }
+
+    #file-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 13px;
+    }
+
+    #file-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text);
+    }
+
+    #file-size { color: var(--muted); font-size: 12px; }
+
+    #img-preview {
+      max-height: 300px;
+      object-fit: contain;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      width: 100%;
+    }
+
+    /* ── Progress ── */
+    #progress-wrap {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #progress-wrap.visible { display: flex; }
+
+    #progress-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    #progress-bar-bg {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--gold);
+      transition: width 0.3s ease;
+      border-radius: 2px;
+    }
+
+    /* ── Button ── */
+    #run-btn {
+      display: none;
+      padding: 14px 24px;
+      background: var(--gold);
+      color: #0d0d0d;
+      border: none;
+      border-radius: var(--radius);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+
+    #run-btn.visible { display: block; }
+    #run-btn:hover { background: var(--gold-light); }
+    #run-btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Output Panel ── */
+    .output-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #copy-btn {
+      display: none;
+      padding: 7px 14px;
+      background: transparent;
+      color: var(--gold);
+      border: 1px solid var(--gold);
+      border-radius: var(--radius);
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    #copy-btn.visible { display: block; }
+    #copy-btn:hover { background: var(--gold); color: #0d0d0d; }
+
+    #output {
+      flex: 1;
+      min-height: 400px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-y: auto;
+      resize: vertical;
+    }
+
+    #output:empty::before {
+      content: 'Extracted text will appear here…';
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      main { grid-template-columns: 1fr; padding: 24px 20px; }
+      header { padding: 16px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/">Fasanya</a>
+  <span class="divider">/</span>
+  <h1>Document OCR</h1>
+</header>
+
+<main>
+  <!-- Left: Upload -->
+  <div class="panel">
+    <span class="panel-label">Upload Document</span>
+
+    <div id="drop-zone">
+      <input type="file" id="file-input" accept="image/*,.pdf" />
+      <div class="drop-icon">⬆</div>
+      <div class="drop-title">Drop your file here</div>
+      <div class="drop-sub">or click to browse<br/>PNG, JPG, TIFF, WebP, PDF</div>
+    </div>
+
+    <div id="preview-wrap">
+      <div id="file-info">
+        <span id="file-name"></span>
+        <span id="file-size"></span>
+      </div>
+      <img id="img-preview" alt="Preview" style="display:none" />
+    </div>
+
+    <div id="progress-wrap">
+      <div id="progress-label">Processing…</div>
+      <div id="progress-bar-bg"><div id="progress-bar"></div></div>
+    </div>
+
+    <button id="run-btn">Extract Text</button>
+  </div>
+
+  <!-- Right: Output -->
+  <div class="output-panel">
+    <div class="output-header">
+      <span class="panel-label">Extracted Text</span>
+      <button id="copy-btn">Copy</button>
+    </div>
+    <div id="output"></div>
+  </div>
+</main>
+
+<script>
+  // Configure PDF.js worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const dropZone    = document.getElementById('drop-zone');
+  const fileInput   = document.getElementById('file-input');
+  const previewWrap = document.getElementById('preview-wrap');
+  const fileName    = document.getElementById('file-name');
+  const fileSize    = document.getElementById('file-size');
+  const imgPreview  = document.getElementById('img-preview');
+  const progressWrap= document.getElementById('progress-wrap');
+  const progressBar = document.getElementById('progress-bar');
+  const progressLbl = document.getElementById('progress-label');
+  const runBtn      = document.getElementById('run-btn');
+  const output      = document.getElementById('output');
+  const copyBtn     = document.getElementById('copy-btn');
+
+  let currentFile = null;
+
+  // Drag & drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  function handleFile(file) {
+    currentFile = file;
+    fileName.textContent = file.name;
+    fileSize.textContent = formatSize(file.size);
+    previewWrap.classList.add('visible');
+    runBtn.classList.add('visible');
+    output.textContent = '';
+    copyBtn.classList.remove('visible');
+    progressWrap.classList.remove('visible');
+
+    // Show image preview for image files
+    if (file.type.startsWith('image/')) {
+      imgPreview.style.display = 'block';
+      imgPreview.src = URL.createObjectURL(file);
+    } else {
+      imgPreview.style.display = 'none';
+    }
+  }
+
+  runBtn.addEventListener('click', async () => {
+    if (!currentFile) return;
+    runBtn.disabled = true;
+    output.textContent = '';
+    copyBtn.classList.remove('visible');
+    progressWrap.classList.add('visible');
+    setProgress(0, 'Starting…');
+
+    try {
+      let text = '';
+      if (currentFile.type === 'application/pdf') {
+        text = await ocrPdf(currentFile);
+      } else {
+        text = await ocrImage(currentFile);
+      }
+      output.textContent = text.trim() || '(No text detected)';
+      copyBtn.classList.add('visible');
+    } catch (err) {
+      output.textContent = 'Error: ' + err.message;
+    } finally {
+      runBtn.disabled = false;
+      progressWrap.classList.remove('visible');
+    }
+  });
+
+  async function ocrImage(file, progressOffset = 0, progressRange = 100) {
+    const url = URL.createObjectURL(file);
+    const result = await Tesseract.recognize(url, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = progressOffset + m.progress * progressRange;
+          setProgress(pct, `Recognising text… ${Math.round(pct)}%`);
+        } else {
+          setProgress(progressOffset, m.status);
+        }
+      }
+    });
+    URL.revokeObjectURL(url);
+    return result.data.text;
+  }
+
+  async function ocrPdf(file) {
+    setProgress(0, 'Loading PDF…');
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const numPages = pdf.numPages;
+    const parts = [];
+    const perPage = 100 / numPages;
+
+    for (let i = 1; i <= numPages; i++) {
+      setProgress((i - 1) * perPage, `Rendering page ${i} of ${numPages}…`);
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2.0 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+      // Convert canvas to blob for Tesseract
+      const blob = await canvasToBlob(canvas);
+      const text = await Tesseract.recognize(blob, 'eng', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            const pct = (i - 1) * perPage + m.progress * perPage;
+            setProgress(pct, `Page ${i}/${numPages} — ${Math.round(pct)}%`);
+          }
+        }
+      });
+      if (numPages > 1) parts.push(`— Page ${i} —\n${text.data.text}`);
+      else parts.push(text.data.text);
+    }
+
+    return parts.join('\n\n');
+  }
+
+  function canvasToBlob(canvas) {
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  }
+
+  function setProgress(pct, label) {
+    progressBar.style.width = Math.min(100, pct) + '%';
+    progressLbl.textContent = label;
+  }
+
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(output.textContent).then(() => {
+      const orig = copyBtn.textContent;
+      copyBtn.textContent = 'Copied';
+      setTimeout(() => copyBtn.textContent = orig, 1500);
+    });
+  });
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+</script>
+</body>
+</html>
