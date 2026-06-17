@@ -115,7 +115,7 @@
 
     /* ── PRODUCT ── */
     .product { padding: 72px 24px 80px; border-bottom: 1px solid var(--border); }
-    .product-inner { max-width: 800px; margin: 0 auto; }
+    .product-inner { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
     .eyebrow { font-size: 9px; font-weight: 400; letter-spacing: 4px; text-transform: uppercase; color: var(--gold-dim); margin-bottom: 20px; display: block; }
     .section-h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(32px, 4vw, 52px); font-weight: 300; line-height: 1.12; color: var(--white); margin-bottom: 12px; }
     .section-h2 em { font-style: italic; color: var(--gold); }
@@ -232,7 +232,10 @@
 
 <nav id="nav">
   <a href="#" class="nav-logo">Fasanya</a>
-  <a href="/ChainReady" class="nav-cta">Open the tool →</a>
+  <div style="display:flex;align-items:center;gap:24px;">
+    <a href="/translate" class="nav-link">Translation</a>
+    <a href="/ChainReady" class="nav-cta">Open the tool →</a>
+  </div>
 </nav>
 
 <!-- HERO -->
@@ -295,6 +298,55 @@
           <a href="/ChainReady" class="btn-outline" style="font-size:11px;padding:8px 18px;">Try it now →</a>
         </div>
       </div>
+
+      <!-- Translation Tool Card -->
+      <div class="card reveal">
+        <div class="card-head">
+          <div>
+            <span class="card-name-sub">A Fasanya Tool</span>
+            <div class="card-name">Translation</div>
+            <div class="card-desc">European Language Translation</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;">
+            <span class="card-tag">Free · 34 Languages · 2026</span>
+            <a href="/translate" class="btn-gold" style="padding:9px 20px;font-size:11px;">
+              Open the tool
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <div class="card-stats">
+          <div class="cstat"><div class="cstat-n">34</div><div class="cstat-l">Languages</div></div>
+          <div class="cstat"><div class="cstat-n">4</div><div class="cstat-l">File Formats</div></div>
+          <div class="cstat"><div class="cstat-n">PDF</div><div class="cstat-l">Support</div></div>
+          <div class="cstat"><div class="cstat-n">Free</div><div class="cstat-l">No key needed</div></div>
+        </div>
+
+        <div class="card-feats">
+          <div class="feat-row">
+            <div class="feat-dot"></div>
+            <div class="feat-name">Paste &amp; translate</div>
+            <div class="feat-desc">Type or paste any text and translate instantly between European languages.</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-dot"></div>
+            <div class="feat-name">Document upload</div>
+            <div class="feat-desc">Upload PDF, DOCX, HTML, or TXT files — text is extracted and translated in one step.</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-dot"></div>
+            <div class="feat-name">34 European languages</div>
+            <div class="feat-desc">From Albanian to Welsh, including all EU official languages plus Norwegian, Serbian, and more.</div>
+          </div>
+        </div>
+
+        <div class="card-cta">
+          <p class="card-cta-copy">Translate text and documents across <strong>major European languages</strong> — instantly, in your browser.</p>
+          <a href="/translate" class="btn-outline" style="font-size:11px;padding:8px 18px;">Try it now →</a>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -334,6 +386,7 @@
     <span class="f-logo">Fasanya</span>
     <span class="f-copy">© 2026 Fasanya. All rights reserved.</span>
     <a href="/ChainReady" class="f-link">ChainReady →</a>
+    <a href="/translate" class="f-link">Translation →</a>
   </footer>
 
 </div>

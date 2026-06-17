@@ -6,3 +6,5 @@
 /chainready/   /chainready.html      200
 /ocr           /ocr.html             200
 /ocr/          /ocr.html             200
+/translate     /translate.html       200
+/translate/    /translate.html       200
