@@ -2490,23 +2490,64 @@ document.getElementById('btn-presets-close').addEventListener('click',()=>{
 const RAW_EXTS=new Set(['arw','cr2','cr3','nef','orf','raf','rw2','dng','raw','srw','pef','x3f','mrw','3fr','mef','erf','rwl']);
 function isRawFile(f){return RAW_EXTS.has((f.name.split('.').pop()||'').toLowerCase());}
 
-let _Exifr=null;
-async function getExifr(){
-  if(_Exifr)return _Exifr;
-  const mod=await import('https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.esm.js');
-  _Exifr=mod.default||mod;
-  return _Exifr;
+// Walk the TIFF/IFD tree inside a RAW file and return the largest embedded JPEG preview.
+// ARW, CR2, NEF, DNG and most other RAW formats are TIFF-based and store one or more
+// JPEG previews at JPEGInterchangeFormat / JPEGInterchangeFormatLength tags.
+function extractBestJpeg(buffer){
+  const bytes=new Uint8Array(buffer);
+  const view=new DataView(buffer);
+  if(bytes.length<8)return null;
+  const le=bytes[0]===0x49; // 'II' = little-endian
+  if(!le&&bytes[0]!==0x4D)return null; // 'MM' = big-endian; anything else = not TIFF
+  function r16(o){return view.getUint16(o,le);}
+  function r32(o){return view.getUint32(o,le);}
+  if(r16(2)!==42)return null; // TIFF magic
+  const jpegs=[];
+  const visited=new Set();
+  function scanIFD(offset){
+    if(!offset||offset<8||offset+2>bytes.length||visited.has(offset))return;
+    visited.add(offset);
+    let n;
+    try{n=r16(offset);}catch(e){return;}
+    if(n<1||n>512)return;
+    let jpgOff=0,jpgLen=0;
+    for(let i=0;i<n;i++){
+      const b=offset+2+i*12;
+      if(b+12>bytes.length)break;
+      const tag=r16(b);
+      const count=r32(b+4);
+      const vOff=b+8;
+      if(tag===0x014A){ // SubIFD — may be an array of offsets
+        if(count===1){scanIFD(r32(vOff));}
+        else{const a=r32(vOff);for(let k=0;k<count&&k<8;k++){if(a+k*4+4<=bytes.length)scanIFD(r32(a+k*4));}}
+      }else if(tag===0x8769){scanIFD(r32(vOff));} // ExifIFD
+      else if(tag===0x0201){jpgOff=r32(vOff);}    // JPEGInterchangeFormat
+      else if(tag===0x0202){jpgLen=r32(vOff);}    // JPEGInterchangeFormatLength
+    }
+    if(jpgOff>0&&jpgLen>5000&&jpgOff+jpgLen<=bytes.length&&
+       bytes[jpgOff]===0xFF&&bytes[jpgOff+1]===0xD8){
+      jpegs.push({off:jpgOff,len:jpgLen});
+    }
+    const nextOff=offset+2+n*12;
+    if(nextOff+4<=bytes.length){const next=r32(nextOff);if(next&&next!==offset)scanIFD(next);}
+  }
+  try{scanIFD(r32(4));}catch(e){}
+  if(!jpegs.length)return null;
+  jpegs.sort((a,b)=>b.len-a.len);
+  const{off,len}=jpegs[0];
+  return buffer.slice(off,off+len);
 }
 
 async function loadRawBitmap(file){
-  // Try the native browser codec first (works on some platforms/formats)
+  // Try the native browser codec first (works on some platforms for DNG/HEIC)
   try{return await createImageBitmap(file);}catch(_){}
-  // Extract the embedded full-quality JPEG preview that every RAW file carries internally
-  const Exifr=await getExifr();
-  let buf;
-  try{buf=await Exifr.thumbnail(file);}catch(e){throw new Error('Could not read RAW file structure: '+e.message);}
-  if(!buf||buf.byteLength<2000)throw new Error('No usable embedded preview found in this RAW file.');
-  return await createImageBitmap(new Blob([buf],{type:'image/jpeg'}));
+  // Parse the TIFF structure to extract the largest embedded JPEG preview
+  const buf=await file.arrayBuffer();
+  const jpeg=extractBestJpeg(buf);
+  if(jpeg){
+    try{return await createImageBitmap(new Blob([jpeg],{type:'image/jpeg'}));}catch(_){}
+  }
+  throw new Error('No usable JPEG preview found inside this RAW file.');
 }
 
 async function setupEditorFromBitmap(bitmap,file){
