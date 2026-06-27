@@ -597,8 +597,8 @@ input[type="range"].blu-track::-webkit-slider-thumb { border-color: var(--blu-ch
       <strong>Click to open</strong> or drag &amp; drop<br>
       your image here
     </div>
-    <p class="land-formats">JPEG · PNG · WebP · TIFF</p>
-    <input type="file" id="land-file-input" accept="image/*">
+    <p class="land-formats">JPEG · PNG · WebP · TIFF · RAW (ARW · CR2 · NEF · DNG…)</p>
+    <input type="file" id="land-file-input" accept="image/*,.arw,.cr2,.cr3,.nef,.orf,.raf,.rw2,.dng,.raw,.srw,.pef,.x3f,.mrw,.3fr,.mef,.erf,.rwl">
   </label>
 
   <div class="land-features">
@@ -607,6 +607,7 @@ input[type="range"].blu-track::-webkit-slider-thumb { border-color: var(--blu-ch
     <span class="land-feat">Sharpening &amp; NR</span>
     <span class="land-feat">Vignette &amp; Grain</span>
     <span class="land-feat">12 Built-in Presets</span>
+    <span class="land-feat">RAW (ARW · CR2 · NEF · DNG)</span>
     <span class="land-feat">JPEG / PNG / WebP Export</span>
   </div>
 </div>
@@ -657,7 +658,7 @@ input[type="range"].blu-track::-webkit-slider-thumb { border-color: var(--blu-ch
         <path d="M10 9v4M8 11l2-2 2 2"/>
       </svg>
     </button>
-    <input type="file" id="toolbar-file-input" accept="image/*" class="hidden">
+    <input type="file" id="toolbar-file-input" accept="image/*,.arw,.cr2,.cr3,.nef,.orf,.raf,.rw2,.dng,.raw,.srw,.pef,.x3f,.mrw,.3fr,.mef,.erf,.rwl" class="hidden">
 
     <div class="tool-divider"></div>
 
@@ -2486,36 +2487,67 @@ document.getElementById('btn-presets-close').addEventListener('click',()=>{
 /* ═══════════════════════════════════════════════════════════
    § IMPORT
    ═══════════════════════════════════════════════════════════ */
+const RAW_EXTS=new Set(['arw','cr2','cr3','nef','orf','raf','rw2','dng','raw','srw','pef','x3f','mrw','3fr','mef','erf','rwl']);
+function isRawFile(f){return RAW_EXTS.has((f.name.split('.').pop()||'').toLowerCase());}
+
+async function setupEditorFromBitmap(bitmap,file){
+  originalBitmap=bitmap;
+  const maxPx=2000;
+  const scale=Math.min(1,maxPx/Math.max(bitmap.width,bitmap.height));
+  const pw=Math.round(bitmap.width*scale),ph=Math.round(bitmap.height*scale);
+  previewBitmap=await createImageBitmap(bitmap,{resizeWidth:pw,resizeHeight:ph});
+  document.getElementById('landing').classList.add('hidden');
+  document.getElementById('editor').classList.remove('hidden');
+  document.getElementById('canvas-empty').classList.add('hidden');
+  document.getElementById('hdr-filename').textContent=file.name;
+  STATE=JSON.parse(JSON.stringify(DEFAULT_STATE));
+  syncAllSliders();updateHSLRows();drawCurve();
+  ['shadows','midtones','highlights'].forEach(r=>drawWheel(document.getElementById(`wheel-${r}`)));
+  document.querySelectorAll('.panel-section').forEach(el=>el.classList.remove('dirty'));
+  document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
+  setTimeout(()=>{fitToScreen();doRender();},50);
+}
+
 async function loadImage(file){
-  if(!file||!file.type.startsWith('image/'))return;
+  if(!file)return;
+  const raw=isRawFile(file);
+  if(!raw&&!file.type.startsWith('image/'))return;
+
+  if(raw){
+    // Use browser's native OS codec (works on iOS/macOS Safari for ARW, CR2, NEF, DNG, etc.)
+    // Fall back to treating as a blob image if MIME is opaque
+    let bitmap=null;
+    try{
+      bitmap=await createImageBitmap(file);
+    }catch(_){
+      // Some browsers report RAW files as application/octet-stream;
+      // re-wrap as image/x-raw so the OS codec path is attempted
+      try{
+        const blob=new Blob([await file.arrayBuffer()],{type:'image/x-raw'});
+        bitmap=await createImageBitmap(blob);
+      }catch(e2){
+        alert(
+          'Could not decode "'+file.name+'".\n\n'+
+          'RAW decoding relies on your device\'s built-in camera codec.\n'+
+          'Supported formats on Apple devices include ARW, CR2, NEF, DNG and more.\n\n'+
+          'If this file isn\'t opening, convert it to DNG or JPEG first using your camera app or Adobe DNG Converter.'
+        );
+        return;
+      }
+    }
+    await setupEditorFromBitmap(bitmap,file);
+    return;
+  }
+
+  // Standard JPEG / PNG / WebP / TIFF path
   const url=URL.createObjectURL(file);
   const img=new Image();
   img.onload=async function(){
     URL.revokeObjectURL(url);
-    // Store full bitmap
-    originalBitmap=await createImageBitmap(img);
-    // Create preview bitmap (max 2000px longest side)
-    const maxPx=2000;
-    const scale=Math.min(1,maxPx/Math.max(img.width,img.height));
-    const pw=Math.round(img.width*scale),ph=Math.round(img.height*scale);
-    previewBitmap=await createImageBitmap(img,{resizeWidth:pw,resizeHeight:ph});
-
-    // Show editor
-    document.getElementById('landing').classList.add('hidden');
-    document.getElementById('editor').classList.remove('hidden');
-    document.getElementById('canvas-empty').classList.add('hidden');
-    document.getElementById('hdr-filename').textContent=file.name;
-
-    // Reset state
-    STATE=JSON.parse(JSON.stringify(DEFAULT_STATE));
-    syncAllSliders();updateHSLRows();drawCurve();
-    ['shadows','midtones','highlights'].forEach(r=>drawWheel(document.getElementById(`wheel-${r}`)));
-    document.querySelectorAll('.panel-section').forEach(el=>el.classList.remove('dirty'));
-    document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
-
-    // Initial render
-    setTimeout(()=>{fitToScreen();doRender();},50);
+    const bitmap=await createImageBitmap(img);
+    await setupEditorFromBitmap(bitmap,file);
   };
+  img.onerror=function(){URL.revokeObjectURL(url);alert('Could not open "'+file.name+'".');};
   img.src=url;
 }
 
