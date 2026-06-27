@@ -8,3 +8,6 @@
 /ocr/          /ocr.html             200
 /translate     /translate.html       200
 /translate/    /translate.html       200
+/studio        /photostudio.html     200
+/studio/       /photostudio.html     200
+/photostudio   /photostudio.html     200
