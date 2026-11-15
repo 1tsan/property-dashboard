@@ -5,10 +5,15 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test test/*.test.mjs",
-    "self-host-images": "node scripts/self-host-images.mjs"
+    "self-host-images": "node scripts/self-host-images.mjs",
+    "dev": "node scripts/dev.mjs"
   },
   "devDependencies": {
     "esbuild": "0.25.5",
     "preact": "10.26.9"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "zod": "^4.6.7"
   }
 }
