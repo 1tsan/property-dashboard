@@ -1,16 +1,16 @@
 import { render, Fragment } from "preact";
 import { useState, useEffect, useMemo, useId, useRef } from "preact/hooks";
 import {
-  MARKET_RATE, RATE_AS_OF, SDLT_EFFECTIVE, STRESS_DELTA, LTI_CAP, FTB_MAX_PRICE,
-  calcMortgage, computePosition, breakEvenOffer, fmt, fmtSigned, fmtPct, JOURNEYS,
+  MARKET_RATE, RATE_AS_OF, STRESS_DELTA, LTI_CAP, FTB_MAX_PRICE, NATIONS, bandLabel,
+  calcMortgage, calcOverpayment, computePosition, breakEvenOffer, maxDepositPct, fmt, fmtSigned, fmtPct, JOURNEYS,
 } from "./calc.js";
 
 // ─── Persistence (this device only) ───────────────────────────────────────────
 const STORE_KEY = "chainready:v1";
 
 const DEFAULT_INPUTS = {
-  offerPrice: 450000, depositPct: 15, buyerType: "standard", nonResident: false,
-  mortgageRate: MARKET_RATE, mortgageTerm: 25,
+  offerPrice: 450000, depositPct: 15, buyerType: "standard", nonResident: false, nation: "england",
+  mortgageRate: MARKET_RATE, mortgageTerm: 25, overpayment: 0,
   salePrice: 320000, existingMortgage: 0, agentFeePct: 1.5, agentFeeVAT: true, sellerSolicitorFee: 1500,
   buyerSolicitorFee: 2000, surveyFee: 800, removals: 1200, mortgageArrangement: 999, otherCosts: 500,
   savings: 50000,
@@ -21,17 +21,58 @@ const DEFAULT_STATE = {
   inputs: DEFAULT_INPUTS, income: "", scen: {}, saved: [],
 };
 
-function loadState() {
+// Only accept known keys of the expected type, whether they come from storage or from a shared link.
+function cleanInputs(raw) {
+  const out = { ...DEFAULT_INPUTS };
+  for (const k of Object.keys(DEFAULT_INPUTS)) {
+    const v = raw?.[k];
+    if (typeof v !== typeof DEFAULT_INPUTS[k]) continue;
+    if (typeof v === "number" && !(Number.isFinite(v) && v >= 0)) continue;
+    out[k] = v;
+  }
+  if (!NATIONS[out.nation]) out.nation = "england";
+  if (!["standard", "firstTime", "additional"].includes(out.buyerType)) out.buyerType = "standard";
+  return out;
+}
+
+function loadStored() {
   try {
     const d = JSON.parse(localStorage.getItem(STORE_KEY));
     if (!d || d.v !== 1 || (d.journey && !JOURNEYS[d.journey])) return DEFAULT_STATE;
-    const s = { ...DEFAULT_STATE, ...d, inputs: { ...DEFAULT_INPUTS, ...d.inputs }, ob: { ...DEFAULT_STATE.ob, ...d.ob } };
+    const s = { ...DEFAULT_STATE, ...d, inputs: cleanInputs(d.inputs), ob: { ...DEFAULT_STATE.ob, ...d.ob } };
     if (!s.journey) s.stage = "journey";
     if (!Array.isArray(s.saved)) s.saved = [];
     return s;
   } catch {
     return DEFAULT_STATE;
   }
+}
+
+// Share links carry the numbers in the URL fragment, which browsers never send to a server.
+const b64url = {
+  enc: (text) => btoa(String.fromCharCode(...new TextEncoder().encode(text))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+  dec: (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))),
+};
+function shareUrl(s) {
+  const payload = JSON.stringify({ j: s.journey, i: s.inputs });
+  return location.href.split("#")[0] + "#s=" + b64url.enc(payload);
+}
+function loadShared() {
+  const m = location.hash.match(/^#s=([\w-]+)$/);
+  if (!m) return null;
+  try {
+    const d = JSON.parse(b64url.dec(m[1]));
+    if (!JOURNEYS[d.j]) return null;
+    return { journey: d.j, inputs: cleanInputs(d.i), stage: "dashboard", tab: "overview", scen: {} };
+  } catch {
+    return null;
+  } finally {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+}
+function loadState() {
+  const stored = loadStored(), shared = loadShared();
+  return shared ? { ...stored, ...shared } : stored;
 }
 function saveState(s) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 1, ...s })); } catch { /* private mode: run unsaved */ }
@@ -42,7 +83,7 @@ function Fan({ style }) {
   return (
     <svg class="cr-fan" width="42" height="20" viewBox="0 0 42 20" style={style} aria-hidden="true">
       {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-        <line key={i} x1="21" y1="20" x2={3 + i * 5.7} y2="2" stroke="var(--gold)" stroke-width="1" opacity={0.35 + Math.abs(3 - i) * 0.12} />
+        <line key={i} x1="21" y1="20" x2={3 + i * 5.7} y2="2" stroke="var(--accent)" stroke-width="1" opacity={0.35 + Math.abs(3 - i) * 0.12} />
       ))}
     </svg>
   );
@@ -198,7 +239,7 @@ function Donut({ segments, centerLabel, centerValue, size = 200 }) {
           offset += len;
           return el;
         })}
-        <circle cx={c} cy={c} r={r - 22} fill="none" stroke="var(--gold)" stroke-width="0.75" opacity="0.4" />
+        <circle cx={c} cy={c} r={r - 22} fill="none" stroke="var(--accent)" stroke-width="0.75" opacity="0.4" />
       </svg>
       <div class="cr-donut-center">
         <div class="cr-donut-c-label">{centerLabel}</div>
@@ -348,7 +389,8 @@ function DetailsForm({ journey, values, setValues, onBack, onComplete }) {
 }
 
 // ─── Print report (hidden on screen, shown by the print stylesheet) ───────────
-function PrintReport({ journey, i, p, hasSale, savedRows }) {
+function PrintReport({ journey, i, p, hasSale, savedRows, taxLabel }) {
+  const nation = NATIONS[i.nation];
   const Row = ({ l, v }) => <div class="pr-row"><span>{l}</span><span>{v}</span></div>;
   return (
     <div class="cr-print" aria-hidden="true">
@@ -361,7 +403,7 @@ function PrintReport({ journey, i, p, hasSale, savedRows }) {
         {[
           ["Offer Price", fmt(i.offerPrice)],
           [`Deposit (${i.depositPct}%)`, fmt(p.depositAmount)],
-          ["Stamp Duty", fmt(p.sdlt.total)],
+          [taxLabel, fmt(p.sdlt.total)],
           ["Mortgage", fmt(p.mortgageLoan)],
           [`Monthly (${fmtPct(i.mortgageRate)}, ${i.mortgageTerm}yr)`, fmt(p.mortgage.monthly)],
           ["Surplus / Deficit", fmtSigned(p.surplus)],
@@ -372,7 +414,7 @@ function PrintReport({ journey, i, p, hasSale, savedRows }) {
           <div class="pr-sec-h">Cash Needed</div>
           <div class="pr-sec-b">
             <Row l={`Deposit (${i.depositPct}%)`} v={fmt(p.depositAmount)} />
-            <Row l="Stamp Duty" v={fmt(p.sdlt.total)} />
+            <Row l={taxLabel} v={fmt(p.sdlt.total)} />
             <Row l="Solicitor" v={fmt(i.buyerSolicitorFee)} />
             <Row l="Survey" v={fmt(i.surveyFee)} />
             <Row l="Mortgage Arrangement" v={fmt(i.mortgageArrangement)} />
@@ -405,7 +447,7 @@ function PrintReport({ journey, i, p, hasSale, savedRows }) {
         </div>
       )}
       <div class="pr-footer">
-        Illustrative only — not financial, legal or tax advice. SDLT uses HMRC residential rates for England and Northern Ireland effective {SDLT_EFFECTIVE}.
+        Illustrative only — not financial, legal or tax advice. {nation.tax} uses residential rates for {nation.label} effective {nation.asOf}.
         The default mortgage rate of {MARKET_RATE}% was a best-buy 5-year fixed as of {RATE_AS_OF}; use your own quote. Consult a qualified adviser before making decisions.
       </div>
     </div>
@@ -446,6 +488,12 @@ function App() {
   });
 
   const [scenName, setScenName] = useState("");
+  const [shared, setShared] = useState(null);
+  const copyShareLink = async () => {
+    const url = shareUrl(s);
+    try { await navigator.clipboard.writeText(url); setShared("copied"); setTimeout(() => setShared(null), 2500); }
+    catch { setShared(url); }
+  };
   const [confirmReset, setConfirmReset] = useState(false);
   const tabsRef = useRef(null);
 
@@ -475,20 +523,30 @@ function App() {
   };
 
   const lti = income > 0 ? p.mortgageLoan / income : null;
-  const ftbCliff = i.buyerType === "firstTime" && !p.sdlt.ftbRelief;
+  const nation = NATIONS[i.nation];
+  const taxLabel = i.nation === "england" ? "Stamp Duty" : nation.tax;
+  const ftbCliff = i.nation === "england" && i.buyerType === "firstTime" && !p.sdlt.ftbRelief;
+  const nonResidentApplies = i.nonResident && nation.nonResidentUplift > 0;
   const sdltNote = [
-    i.buyerType === "firstTime" ? (ftbCliff ? "Over £500k — no FTB relief" : "FTB relief applied") : i.buyerType === "additional" ? "+5% surcharge" : "Standard rates",
-    i.nonResident && "+2% non-resident",
+    i.buyerType === "firstTime"
+      ? (p.sdlt.ftbRelief ? "FTB relief applied" : nation.ftb ? "Over £500k — no FTB relief" : `No FTB relief in ${nation.label}`)
+      : i.buyerType === "additional"
+        ? (nation.additional.uplift ? `+${nation.additional.uplift}% surcharge` : nation.additional.flatPct ? `incl. ${nation.additional.flatPct}% ADS` : "Higher rates")
+        : "Standard rates",
+    nonResidentApplies && `+${nation.nonResidentUplift}% non-resident`,
   ].filter(Boolean).join(" · ");
+  const maxDeposit = maxDepositPct(i);
+  const over = calcOverpayment(p.mortgageLoan, i.mortgageRate, i.mortgageTerm, i.overpayment);
+  const yrsMonths = (m) => [Math.floor(m / 12) && `${Math.floor(m / 12)} yr`, m % 12 && `${m % 12} mo`].filter(Boolean).join(" ") || "0 mo";
 
   const costSegments = [
-    { label: "Deposit", value: p.depositAmount, color: "var(--gold)" },
-    { label: "Stamp Duty", value: p.sdlt.total, color: "var(--gold-light)" },
-    { label: "Solicitor", value: i.buyerSolicitorFee, color: "var(--sage)" },
-    { label: "Survey", value: i.surveyFee, color: "var(--gold-deep)" },
-    { label: "Mortgage fee", value: i.mortgageArrangement, color: "var(--clay)" },
-    { label: "Removals", value: i.removals, color: "var(--sage-deep)" },
-    { label: "Other", value: i.otherCosts, color: "var(--cream)" },
+    { label: "Deposit", value: p.depositAmount, color: "var(--c1)" },
+    { label: taxLabel, value: p.sdlt.total, color: "var(--c2)" },
+    { label: "Solicitor", value: i.buyerSolicitorFee, color: "var(--c3)" },
+    { label: "Survey", value: i.surveyFee, color: "var(--c4)" },
+    { label: "Mortgage fee", value: i.mortgageArrangement, color: "var(--c5)" },
+    { label: "Removals", value: i.removals, color: "var(--c6)" },
+    { label: "Other", value: i.otherCosts, color: "var(--c7)" },
   ].filter((seg) => seg.value > 0);
 
   const tabs = [
@@ -496,7 +554,7 @@ function App() {
     { id: "purchase", label: "Purchase" },
     ...(hasSale ? [{ id: "sale", label: "Sale" }] : []),
     { id: "mortgage", label: "Mortgage" },
-    { id: "stampduty", label: "Stamp Duty" },
+    { id: "stampduty", label: taxLabel },
     { id: "scenario", label: "Scenarios" },
   ];
   const activeTab = tabs.some((t) => t.id === tab) ? tab : "overview";
@@ -520,13 +578,24 @@ function App() {
               <button type="button" onClick={() => patch({ stage: "journey" })} class="cr-badge">{JOURNEYS[journey].badge} · change</button>
             )}
           </div>
-          {stage === "dashboard" && (
+          {stage === "dashboard" && (<div class="cr-header-actions">
+            <button type="button" onClick={copyShareLink} class="cr-link cr-export" aria-live="polite">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1 1" /><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1-1" /></svg>
+              {shared === "copied" ? "Link copied" : "Copy link"}
+            </button>
             <button type="button" onClick={() => window.print()} class="cr-link cr-export">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               Print / save PDF
             </button>
-          )}
+          </div>)}
         </header>
+        {shared && shared !== "copied" && (
+          <div class="cr-share">
+            <label for="cr-share-url">Copy this link to share your numbers:</label>
+            <input id="cr-share-url" class="cr-input" type="text" readOnly value={shared} onFocus={(e) => e.target.select()} />
+            <button type="button" class="cr-link" onClick={() => setShared(null)}>Close</button>
+          </div>
+        )}
 
         {stage === "journey" && <JourneyPicker onPick={pickJourney} />}
         {stage === "details" && (
@@ -559,7 +628,7 @@ function App() {
                 <div class="cr-tiles">
                   <StatTile label="Offer Price" value={fmt(i.offerPrice)} sub={JOURNEYS[journey].badge} tone="accent" />
                   <StatTile label="Deposit" value={fmt(p.depositAmount)} sub={`${i.depositPct}% · LTV ${fmtPct(p.ltv)}`} />
-                  <StatTile label="Stamp Duty" value={fmt(p.sdlt.total)} sub={sdltNote} />
+                  <StatTile label={taxLabel} value={fmt(p.sdlt.total)} sub={sdltNote} />
                   <StatTile label="Monthly Payment" value={fmt(p.mortgage.monthly)} sub={p.mortgageLoan > 0 ? `${fmtPct(i.mortgageRate)} · ${i.mortgageTerm}yr` : "No mortgage needed"} />
                   {hasSale
                     ? <StatTile label="Net Sale Proceeds" value={fmt(p.netSaleProceeds)} sub={`Equity ${fmt(p.saleEquity)}`} />
@@ -596,7 +665,9 @@ function App() {
                 )}
 
                 <div class="cr-note">
-                  <strong>SDLT (England &amp; NI, from {SDLT_EFFECTIVE}):</strong> 0% to £125k · 2% to £250k · 5% to £925k · 10% to £1.5m · 12% above. First-time buyers: 0% to £300k, 5% to £500k (no relief above £500k). Additional property: +5% on every band. Scotland (LBTT) and Wales (LTT) use different taxes and aren't modelled.
+                  <strong>{nation.tax} ({nation.label}, rates from {nation.asOf}):</strong>{" "}
+                  {nation.bands.map(([limit, rate], n) => `${rate}% ${limit === Infinity ? "above" : "to " + fmt(limit)}`).join(" · ")}.
+                  {" "}Change nation, buyer type and surcharges on the {taxLabel} tab.
                 </div>
                 <button type="button" onClick={editNumbers} class="cr-link cr-edit-link">← Edit my numbers</button>
               </Fragment>)}
@@ -614,9 +685,18 @@ function App() {
                     <div class="cr-ltv">
                       <div class="cr-hint">Loan-to-value: {fmtPct(p.ltv)}</div>
                       <div class="cr-bar"><div class="cr-bar-fill" style={{ width: `${Math.min(100, p.ltv)}%` }} /></div>
-                      <div class="cr-hint">
+                      <div class="cr-hint cr-hint-gap">
                         {p.ltv === 0 ? "Cash purchase — no mortgage" : p.ltv > 90 ? "Above 90% LTV — fewer products, higher rates" : p.ltv > 75 ? "75–90% LTV — mainstream territory" : "Up to 75% LTV — access to the best rates"}
                       </div>
+                    </div>
+                    <div class="cr-maxdep">
+                      <button type="button" class="cr-link cr-reset" disabled={maxDeposit < 5 || maxDeposit === i.depositPct}
+                        onClick={() => setInput("depositPct")(maxDeposit)}>Use all my cash as deposit</button>
+                      <span class="cr-hint cr-hint-flat">
+                        {maxDeposit < 5
+                          ? "After buying costs, your cash covers less than a 5% deposit."
+                          : `After every buying cost your cash funds up to a ${maxDeposit}% deposit (${fmt((i.offerPrice * maxDeposit) / 100)}), cutting the loan to ${fmt(i.offerPrice * (1 - maxDeposit / 100))}.`}
+                      </span>
                     </div>
                   </Card>
                   <Card title="Buying Costs" subtitle="Adjust to match your quotes">
@@ -681,6 +761,22 @@ function App() {
                     <div class="cr-note cr-note-gap"><strong>Lender stress test:</strong> at {fmtPct(i.mortgageRate + STRESS_DELTA)} your payment would be {fmt(p.stressMortgage.monthly)}/mo. Lenders check you could still afford this.</div>
                   </Card>
                 </div>
+                <Card title="Overpayments" subtitle="See what paying a little extra each month does to the term and the interest bill">
+                  <SliderInput label="Monthly overpayment" value={i.overpayment} onChange={setInput("overpayment")} min={0} max={2000} step={25} editMax={50000} />
+                  {p.mortgageLoan <= 0
+                    ? <div class="cr-hint">No mortgage in this plan.</div>
+                    : i.overpayment <= 0
+                      ? <div class="cr-hint">Move the slider to model an overpayment. Many lenders allow up to 10% of the balance a year without charges — check your product.</div>
+                      : (<Fragment>
+                          <div class="cr-tiles">
+                            <StatTile label="New monthly total" value={fmt(p.mortgage.monthly + i.overpayment)} sub={`${fmt(p.mortgage.monthly)} + ${fmt(i.overpayment)}`} />
+                            <StatTile label="Mortgage-free in" value={yrsMonths(over.months)} sub={`instead of ${i.mortgageTerm} yr`} tone="accent" />
+                            <StatTile label="Time saved" value={yrsMonths(over.monthsSaved)} sub="off the term" tone="pos" />
+                            <StatTile label="Interest saved" value={fmt(over.interestSaved)} sub={`of ${fmt(p.mortgage.interest)}`} tone="pos" />
+                          </div>
+                          <div class="cr-hint">Assumes the rate stays at {fmtPct(i.mortgageRate)} for the whole term and your lender applies overpayments to the balance straight away.</div>
+                        </Fragment>)}
+                </Card>
                 <Card title="Affordability Check" subtitle="Optional — enter your household income to sanity-check the loan size">
                   <div class="cr-afford">
                     <div class="cr-afford-in">
@@ -699,19 +795,24 @@ function App() {
               </Fragment>)}
 
               {activeTab === "stampduty" && (<Fragment>
-                <Card title="Stamp Duty Land Tax" subtitle={`England & NI · HMRC residential rates from ${SDLT_EFFECTIVE}`}>
+                <Card title={nation.taxName} subtitle={`${nation.label} · residential rates from ${nation.asOf}`}>
+                  <div class="cr-field cr-field-lg">
+                    <div class="cr-hint">Where is the property?</div>
+                    <PillToggle label="Nation" options={Object.entries(NATIONS).map(([value, n]) => ({ value, label: n.label }))} value={i.nation} onChange={setInput("nation")} />
+                  </div>
                   <div class="cr-field cr-field-lg">
                     <div class="cr-hint">Buyer type — set from your journey, adjustable here</div>
-                    <PillToggle label="Buyer type" options={[{ value: "standard", label: "Standard" }, { value: "firstTime", label: "First-Time Buyer" }, { value: "additional", label: "Additional (+5%)" }]} value={i.buyerType} onChange={setInput("buyerType")} />
+                    <PillToggle label="Buyer type" options={[{ value: "standard", label: "Standard" }, { value: "firstTime", label: "First-Time Buyer" }, { value: "additional", label: "Additional property" }]} value={i.buyerType} onChange={setInput("buyerType")} />
                   </div>
-                  <Switch label="Non-UK resident buyer (+2% surcharge)" checked={i.nonResident} onChange={setInput("nonResident")} />
+                  {nation.nonResidentUplift > 0 && <Switch label={`Non-UK resident buyer (+${nation.nonResidentUplift}% surcharge)`} checked={i.nonResident} onChange={setInput("nonResident")} />}
                   <div class="cr-gap" />
                   <SliderInput label="Property Price" value={i.offerPrice} onChange={setInput("offerPrice")} min={100000} max={3000000} step={5000} editMax={50000000} />
                 </Card>
                 <div class="cr-grid-2">
                   <Card title="Your Band Breakdown" accent="var(--sage)">
                     {ftbCliff && <div class="cr-alert cr-alert-in">Above {fmt(FTB_MAX_PRICE)} first-time buyer relief doesn't apply, so standard rates are used.</div>}
-                    {p.sdlt.total === 0 && <div class="cr-hint">No stamp duty due at this price.</div>}
+                    {i.buyerType === "firstTime" && !nation.ftb && <div class="cr-alert cr-alert-in">{nation.label} has no first-time buyer relief, so standard rates are used.</div>}
+                    {p.sdlt.total === 0 && <div class="cr-hint">No {nation.tax} due at this price.</div>}
                     {p.sdlt.bands.map((b) => (
                       <div key={b.label} class="cr-band">
                         <span class="cr-band-label">{b.label}</span>
@@ -720,21 +821,40 @@ function App() {
                         <span class="cr-band-tax">{fmt(b.tax)}</span>
                       </div>
                     ))}
+                    {p.sdlt.flatSurcharge > 0 && (
+                      <div class="cr-band">
+                        <span class="cr-band-label">Additional Dwelling Supplement</span>
+                        <div class="cr-band-bar"><div class="cr-band-fill" style={{ width: `${(p.sdlt.flatSurcharge / p.sdlt.total) * 100}%` }} /></div>
+                        <span class="cr-band-rate">{nation.additional.flatPct}%</span>
+                        <span class="cr-band-tax">{fmt(p.sdlt.flatSurcharge)}</span>
+                      </div>
+                    )}
                     <div class="cr-row cr-row-hl">
-                      <span class="cr-row-label">Total SDLT</span>
+                      <span class="cr-row-label">Total {nation.tax}</span>
                       <span class="cr-row-val cr-row-val-lg">{fmt(p.sdlt.total)}</span>
                     </div>
-                    <div class="cr-hint">Effective rate: {i.offerPrice > 0 ? fmtPct((p.sdlt.total / i.offerPrice) * 100) : "0%"} of purchase price · Due within 14 days of completion</div>
+                    <div class="cr-hint">Effective rate: {i.offerPrice > 0 ? fmtPct((p.sdlt.total / i.offerPrice) * 100) : "0%"} of purchase price · Due within {i.nation === "england" ? 14 : 30} days of completion</div>
                   </Card>
                   <Card title="Rate Tables">
-                    <div class="cr-hint">Standard residential</div>
-                    {[["£0 – £125,000", "0%"], ["£125,001 – £250,000", "2%"], ["£250,001 – £925,000", "5%"], ["£925,001 – £1,500,000", "10%"], ["Above £1,500,000", "12%"]].map(([b, r]) => (
-                      <div key={b} class="cr-row"><span class="cr-row-label">{b}</span><span class="cr-row-val cr-sage">{r}</span></div>
-                    ))}
+                    <div class="cr-hint">Standard residential · {nation.label}</div>
+                    {nation.bands.map(([limit, rate], n) => {
+                      const label = bandLabel(n ? nation.bands[n - 1][0] : 0, limit);
+                      return <div key={label} class="cr-row"><span class="cr-row-label">{label}</span><span class="cr-row-val cr-sage">{rate}%</span></div>;
+                    })}
                     <div class="cr-note cr-note-gap">
-                      <strong>First-time buyers:</strong> 0% to £300k, 5% on £300k–£500k. No relief above £500k.<br />
-                      <strong>Additional property:</strong> +5% surcharge on every band.<br />
-                      <strong>Non-UK residents:</strong> +2% on every band, on top of any other surcharge.
+                      {i.nation === "england" && (<Fragment>
+                        <strong>First-time buyers:</strong> 0% to £300k, 5% on £300k–£500k. No relief above £500k.<br />
+                        <strong>Additional property:</strong> +5% surcharge on every band.<br />
+                        <strong>Non-UK residents:</strong> +2% on every band, on top of any other surcharge.
+                      </Fragment>)}
+                      {i.nation === "scotland" && (<Fragment>
+                        <strong>First-time buyers:</strong> the 0% band is extended to £175,000.<br />
+                        <strong>Additional property:</strong> Additional Dwelling Supplement of 8% of the whole price, on top of LBTT.
+                      </Fragment>)}
+                      {i.nation === "wales" && (<Fragment>
+                        <strong>First-time buyers:</strong> no separate relief — main rates apply.<br />
+                        <strong>Additional property:</strong> higher rates of 5% to £180k, 8.5% to £250k, 10% to £400k, 12.5% to £750k, 15% to £1.5m and 17% above.
+                      </Fragment>)}
                     </div>
                   </Card>
                 </div>
@@ -751,7 +871,7 @@ function App() {
                 <div class="cr-scen-grid">
                   <div class="cr-scen-lever">
                     <SliderInput label="Offer Price" value={si.offerPrice} onChange={setScen("offerPrice")} min={Math.max(50000, i.offerPrice - 250000)} max={i.offerPrice + 300000} step={5000} />
-                    <div class="cr-hint cr-hint-flat">Deposit {fmt(sp.depositAmount)} · SDLT {fmt(sp.sdlt.total)}</div>
+                    <div class="cr-hint cr-hint-flat">Deposit {fmt(sp.depositAmount)} · {nation.tax} {fmt(sp.sdlt.total)}</div>
                   </div>
                   {hasSale && (
                     <div class="cr-scen-lever">
@@ -789,7 +909,7 @@ function App() {
                       { label: "Total Cash Needed", base: p.totalCashNeeded, v: sp.totalCashNeeded, lowerIsBetter: true },
                       { label: "Total Cash Available", base: p.cashAvailable, v: sp.cashAvailable, lowerIsBetter: false },
                       { label: "Deposit", base: p.depositAmount, v: sp.depositAmount, lowerIsBetter: true },
-                      { label: "Stamp Duty", base: p.sdlt.total, v: sp.sdlt.total, lowerIsBetter: true },
+                      { label: taxLabel, base: p.sdlt.total, v: sp.sdlt.total, lowerIsBetter: true },
                       { label: "Monthly Mortgage", base: p.mortgage.monthly, v: sp.mortgage.monthly, lowerIsBetter: true },
                     ].map(({ label, base, v, lowerIsBetter }) => {
                       const diff = Math.round(v) - Math.round(base);
@@ -846,7 +966,7 @@ function App() {
         )}
 
         <footer class="cr-footer">
-          <p>Illustrative only — not financial, legal or tax advice. Stamp duty covers England &amp; Northern Ireland. Check figures with your solicitor and mortgage adviser before you commit.</p>
+          <p>Illustrative only — not financial, legal or tax advice. Property tax is modelled for England &amp; NI (SDLT), Scotland (LBTT) and Wales (LTT). Check figures with your solicitor and mortgage adviser before you commit.</p>
           <p>
             <a href="/">fasanya.co.uk</a>
             {stage !== "journey" && (<Fragment>
@@ -859,7 +979,7 @@ function App() {
         </footer>
       </div>
 
-      {stage === "dashboard" && <PrintReport journey={journey} i={i} p={p} hasSale={hasSale} savedRows={savedRows} />}
+      {stage === "dashboard" && <PrintReport journey={journey} i={i} p={p} hasSale={hasSale} savedRows={savedRows} taxLabel={taxLabel} />}
     </div>
   );
 }

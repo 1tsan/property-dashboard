@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calcSDLT, calcMortgage, computePosition, breakEvenOffer, fmt } from "../src/chainready/calc.js";
+import { calcSDLT, calcMortgage, computePosition, breakEvenOffer, maxDepositPct, calcOverpayment, fmt } from "../src/chainready/calc.js";
 
 const sdlt = (p, t, o) => calcSDLT(p, t, o).total;
 
@@ -47,7 +47,7 @@ test("mortgage repayment", () => {
 });
 
 const base = {
-  offerPrice: 450000, depositPct: 15, buyerType: "standard", nonResident: false,
+  offerPrice: 450000, depositPct: 15, buyerType: "standard", nonResident: false, nation: "england",
   mortgageRate: 4.35, mortgageTerm: 25, hasSale: true, salePrice: 320000, existingMortgage: 100000,
   agentFeePct: 1.5, agentFeeVAT: true, sellerSolicitorFee: 1500, buyerSolicitorFee: 2000,
   surveyFee: 800, removals: 1200, mortgageArrangement: 999, otherCosts: 500, savings: 50000,
@@ -68,6 +68,43 @@ test("break-even offer sits on the surplus boundary", () => {
   assert.ok(computePosition({ ...base, offerPrice: be }).surplus >= 0);
   assert.ok(computePosition({ ...base, offerPrice: be + 1000 }).surplus < 0);
   assert.equal(breakEvenOffer({ ...base, hasSale: false, savings: 0 }), null);
+});
+
+test("Scotland LBTT", () => {
+  const s = (p, t) => calcSDLT(p, t, { nation: "scotland" }).total;
+  assert.equal(s(145000, "standard"), 0);
+  assert.equal(s(300000, "standard"), 2100 + 2500);
+  assert.equal(s(800000, "standard"), 2100 + 3750 + 42500 + 6000);
+  assert.equal(s(300000, "firstTime"), 1500 + 2500);
+  assert.equal(s(300000, "additional"), 4600 + 24000);
+  assert.equal(calcSDLT(300000, "standard", { nation: "scotland", nonResident: true }).total, 4600);
+});
+
+test("Wales LTT", () => {
+  const w = (p, t) => calcSDLT(p, t, { nation: "wales" }).total;
+  assert.equal(w(225000, "standard"), 0);
+  assert.equal(w(300000, "standard"), 4500);
+  assert.equal(w(500000, "standard"), 10500 + 7500);
+  assert.equal(w(300000, "firstTime"), 4500);
+  assert.equal(calcSDLT(300000, "firstTime", { nation: "wales" }).ftbRelief, false);
+  assert.equal(w(300000, "additional"), 9000 + 5950 + 5000);
+});
+
+test("max deposit leaves no shortfall", () => {
+  const pct = maxDepositPct(base);
+  assert.ok(computePosition({ ...base, depositPct: pct }).surplus >= 0);
+  assert.ok(pct === 100 || computePosition({ ...base, depositPct: pct + 1 }).surplus < 0);
+  assert.equal(maxDepositPct({ ...base, hasSale: false, savings: 0 }), 0);
+});
+
+test("overpayments shorten the term and cut interest", () => {
+  const none = calcOverpayment(300000, 4.35, 25, 0);
+  assert.equal(none.months, 300);
+  assert.equal(none.interestSaved, 0);
+  const o = calcOverpayment(300000, 4.35, 25, 300);
+  assert.ok(o.months < 300 && o.monthsSaved === 300 - o.months);
+  assert.ok(o.interestSaved > 30000 && o.interestSaved < 80000, String(o.interestSaved));
+  assert.equal(calcOverpayment(120000, 0, 10, 1000).months, 60);
 });
 
 test("formatting", () => {
