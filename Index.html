@@ -13,7 +13,11 @@
 <meta property="og:url" content="https://fasanya.co.uk/">
 <meta property="og:title" content="Fasanya — Know your numbers before you move">
 <meta property="og:description" content="ChainReady: the UK property transaction dashboard. Stamp duty, mortgage, sale proceeds and cash position in one place. Free to use.">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="https://fasanya.co.uk/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Fasanya — Know your numbers before you move">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f1eee6'/%3E%3Ctext x='7' y='24' font-family='Georgia,serif' font-size='24' fill='%2320231e'%3EF%3C/text%3E%3Ccircle cx='24' cy='9' r='3' fill='none' stroke='%239d4c34' stroke-width='1.6'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -461,7 +465,9 @@ body::before {
 }
 .contact-form input:focus-visible, .contact-form textarea:focus-visible { outline-offset: 0; }
 .contact-form [aria-invalid="true"] { border-color: #b3261e; }
-.field-error { font-size: 11px; color: #b3261e; }
+.field-error { font-size: 12px; color: #b3261e; }
+.field-error a { color: inherit; }
+.btn:disabled { opacity: .6; cursor: progress; transform: none; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .field-error { color: #f2a59c; } }
 :root[data-theme="dark"] .field-error { color: #f2a59c; }
 .contact-form input:focus,
@@ -791,7 +797,11 @@ body::before {
       </div>
 
       <div>
-        <form class="contact-form" id="contact-form" novalidate aria-describedby="contact-how-form">
+        <!-- data-endpoint: URL that accepts the form as a POST (e.g. a Formspree/Basin form URL, or "/" on Netlify, which
+             detects this form through data-netlify). Left empty, the form composes an email in the visitor's mail app. -->
+        <form class="contact-form" id="contact-form" name="contact" method="POST" data-endpoint="" data-netlify="true" netlify-honeypot="company" novalidate aria-describedby="contact-how-form">
+          <input type="hidden" name="form-name" value="contact">
+          <p class="sr-only" aria-hidden="true"><label>Leave this field empty <input name="company" tabindex="-1" autocomplete="off"></label></p>
           <div class="form-row">
             <label>
               <span class="field-name">First name</span>
@@ -811,14 +821,14 @@ body::before {
             <textarea name="message" placeholder="What's on your mind?" required></textarea>
           </label>
           <p class="field-error" id="contact-error" role="alert" hidden></p>
-          <button type="submit" class="btn btn-terracotta btn-full">Compose email <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 18 18" width="16"><path d="M3 9h12M10.5 4.5 15 9l-4.5 4.5" stroke="currentColor" stroke-linecap="round"/></svg></button>
+          <button type="submit" class="btn btn-terracotta btn-full"><span id="contact-submit-label">Compose email</span> <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 18 18" width="16"><path d="M3 9h12M10.5 4.5 15 9l-4.5 4.5" stroke="currentColor" stroke-linecap="round"/></svg></button>
         </form>
-        <p class="sr-only" id="contact-how-form">Opens your email app with this message addressed to hello@fasanya.co.uk.</p>
+        <p class="sr-only" id="contact-how-form">Sends your message to hello@fasanya.co.uk.</p>
 
         <div class="contact-success" id="contact-success" role="status" aria-live="polite">
           <div class="success-icon" aria-hidden="true">✓</div>
-          <h3>Almost there.</h3>
-          <p>Your email app should have opened with the message filled in — press send there to deliver it. If nothing opened, email <a href="mailto:hello@fasanya.co.uk">hello@fasanya.co.uk</a> directly.</p>
+          <h3 id="success-title">Almost there.</h3>
+          <p id="success-text">Your email app should have opened with the message filled in — press send there to deliver it. If nothing opened, email <a href="mailto:hello@fasanya.co.uk">hello@fasanya.co.uk</a> directly.</p>
           <button class="success-reset" type="button" id="success-reset">Edit message</button>
         </div>
       </div>
@@ -869,15 +879,35 @@ body::before {
     if (e.key === 'Escape' && btn.getAttribute('aria-expanded') === 'true') { setNav(false); btn.focus(); }
   });
 
-  /* Contact form: composes an email in the visitor's own mail app (no backend). */
-  const form    = document.getElementById('contact-form');
-  const success = document.getElementById('contact-success');
-  const reset   = document.getElementById('success-reset');
-  const error   = document.getElementById('contact-error');
+  /* Contact form: posts to data-endpoint when one is configured, otherwise composes an email in the visitor's mail app. */
+  const form     = document.getElementById('contact-form');
+  const success  = document.getElementById('contact-success');
+  const reset    = document.getElementById('success-reset');
+  const error    = document.getElementById('contact-error');
+  const label    = document.getElementById('contact-submit-label');
+  const endpoint = form.dataset.endpoint;
+  if (endpoint) label.textContent = 'Send message';
 
-  form.addEventListener('submit', e => {
+  const showSuccess = sent => {
+    if (sent) {
+      document.getElementById('success-title').textContent = 'Message sent.';
+      document.getElementById('success-text').textContent = "Thanks for getting in touch — we'll reply by email.";
+      reset.textContent = 'Send another';
+      form.reset();
+    }
+    form.hidden = true;
+    success.classList.add('is-active');
+  };
+  const composeEmail = data => {
+    const name = [data.get('firstName'), data.get('lastName')].filter(Boolean).join(' ').trim();
+    const body = `${data.get('message')}\n\n— ${name} (${data.get('email')})`;
+    window.location.href =
+      `mailto:hello@fasanya.co.uk?subject=${encodeURIComponent('Message from fasanya.co.uk')}&body=${encodeURIComponent(body)}`;
+  };
+
+  form.addEventListener('submit', async e => {
     e.preventDefault();
-    const fields  = [...form.querySelectorAll('input, textarea')];
+    const fields  = [...form.querySelectorAll('input:not([type=hidden]):not([name=company]), textarea')];
     const invalid = fields.filter(f => !f.checkValidity());
     fields.forEach(f => f.setAttribute('aria-invalid', String(invalid.includes(f))));
     error.hidden = invalid.length === 0;
@@ -887,12 +917,25 @@ body::before {
       return;
     }
     const data = new FormData(form);
-    const name = [data.get('firstName'), data.get('lastName')].filter(Boolean).join(' ').trim();
-    const body = `${data.get('message')}\n\n— ${name} (${data.get('email')})`;
-    window.location.href =
-      `mailto:hello@fasanya.co.uk?subject=${encodeURIComponent('Message from fasanya.co.uk')}&body=${encodeURIComponent(body)}`;
-    form.hidden = true;
-    success.classList.add('is-active');
+    if (data.get('company')) return; // honeypot: bots fill every field
+    if (!endpoint) { composeEmail(data); showSuccess(false); return; }
+
+    const button = form.querySelector('button[type=submit]');
+    button.disabled = true; label.textContent = 'Sending…';
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: new URLSearchParams(data).toString(),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      showSuccess(true);
+    } catch {
+      error.hidden = false;
+      error.innerHTML = 'Sorry, that didn\u2019t send. Please try again, or email <a href="mailto:hello@fasanya.co.uk">hello@fasanya.co.uk</a>.';
+    } finally {
+      button.disabled = false; label.textContent = 'Send message';
+    }
   });
   form.addEventListener('input', e => {
     if (e.target.getAttribute('aria-invalid') === 'true' && e.target.checkValidity()) e.target.setAttribute('aria-invalid', 'false');
