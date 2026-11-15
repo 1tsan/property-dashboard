@@ -11,3 +11,6 @@
 /studio        /photostudio.html     200
 /studio/       /photostudio.html     200
 /photostudio   /photostudio.html     200
+/reimagine     /reimagine.html       200
+/reimagine/    /reimagine.html       200
+/Reimagine     /reimagine.html       200
